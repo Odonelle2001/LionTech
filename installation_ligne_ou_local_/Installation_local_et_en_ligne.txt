@@ -36,20 +36,20 @@ INSTALLATION EN LIGNE
 
 
 
-Oui, tu peux importer liontech.sql directement dans phpMyAdmin sur Aeronfree, mais avec une petite attention :
+Ici, on peut importer liontech.sql directement dans phpMyAdmin sur Aeronfree, mais avec une petite attention :
 
 Le fichier SQL ne crée pas le compte admin automatiquement — cette ligne est commentée dans le fichier parce que le mot de passe nécessite un hash PHP. Donc après l'import du SQL, tu n'auras pas de compte admin pour te connecter.
 
-Tu as deux options :
+On a deux options :
 
 Option A (la plus simple) — utiliser quand même init-db.php juste une fois
-C'est la méthode recommandée car elle crée tout automatiquement, y compris le compte Odonel / Odo2026. Tu supprimes le fichier juste après.
+C'est la méthode recommandée car elle crée tout automatiquement, y compris le compte Odonel / Odo2026. On supprime le fichier juste après.
 
 Option B — importer le SQL + créer l'admin manuellement
 
 Importe liontech.sql dans phpMyAdmin sur Aeronfree
-Dans phpMyAdmin, va dans l'onglet SQL et exécute cette requête en remplaçant HASH par le hash généré :
-D'abord, génère le hash en ouvrant temporairement un fichier PHP sur ton hébergement avec ce contenu :
+Dans phpMyAdmin, on part dans l'onglet SQL et exécute cette requête en remplaçant HASH par le hash généré :
+D'abord, on génère le hash en ouvrant temporairement un fichier PHP sur ton hébergement avec ce contenu :
 <?php echo password_hash('Odo2026', PASSWORD_DEFAULT); ?>
 
 Copie le hash affiché, puis exécute dans phpMyAdmin :
