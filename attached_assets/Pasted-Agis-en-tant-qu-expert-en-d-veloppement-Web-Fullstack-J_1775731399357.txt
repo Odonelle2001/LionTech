@@ -1,0 +1,123 @@
+Agis en tant qu'expert en développement Web Fullstack. Je souhaite que tu génères le code complet pour un projet de site vitrine professionnel avec espace d'administration, basé sur un template HTML/CSS que je vais te fournir (garde le design général du template comme base et améliore-le).
+________________________________________
+🎯 Présentation du projet
+Le projet s'appelle LIONTECH — une agence de développement web. Le site doit permettre aux visiteurs de découvrir les services proposés, consulter les réalisations et contacter l'équipe. Un espace administrateur sécurisé permettra de gérer dynamiquement le contenu du site.
+________________________________________
+🛠️ Stack technique
+•	Frontend : HTML5, CSS3, JavaScript, Bootstrap 5
+•	Backend : PHP (compatible WAMP Server pour exécution en local)
+•	Base de données : MySQL (compatible phpMyAdmin / WAMP)
+•	Animations : CSS transitions fluides + légères animations JavaScript 
+•	Icônes 
+•	Sécurité : Protection contre les injections SQL (requêtes préparées PDO ou MySQLi), 
+________________________________________
+👤 PAGE UTILISATEUR (publique)
+Navigation (Navbar responsive)
+Sections : Accueil | Services | Réalisations | À propos | Contact
+•	Logo LIONTECH à gauche
+•	Bouton "Démarrer mon projet" → redirige vers la section Contact
+•	Bouton "Voir nos Réalisations" → redirige vers la section Réalisations
+•	Bouton de changement de thème (clair / sombre) persistant via localStorage
+•	Bouton de traduction (Français / Anglais) — tout le contenu textuel du site bascule en un clic (utilise des attributs data-fr et data-en sur chaque élément textuel.
+________________________________________
+Section 1 — Accueil (Hero)
+•	Titre accrocheur + sous-titre de présentation de LIONTECH
+•	Animation d'entrée fluide
+•	Les deux boutons CTA : "Démarrer mon projet" et "Voir nos Réalisations"
+________________________________________
+Section 2 — Services
+Affiche les services proposés par LIONTECH avec image caractéristiques si possible, par exemple :
+•	Développement de sites web vitrines
+•	Développement de plateformes web / applications
+•	Design graphique & UI/UX
+•	Maintenance & support
+•	(Tu peux enrichir cette liste selon le contexte de l'agence)
+Chaque service présenté sous forme de carte avec icône Font Awesome, titre et description courte. Animation au scroll.
+________________________________________
+Section 3 — Réalisations
+•	Affichage dynamique des projets récupérés depuis la base de données
+•	Filtre par catégorie : Design Graphique | Plateforme Web | Tous
+•	Chaque carte projet affiche : 
+o	Titre du projet
+o	Catégorie
+o	Description courte
+o	Langages / outils utilisés (badges)
+o	Lien vers le projet (bouton "Voir le projet")
+•	Animation fluide au survol des cartes
+________________________________________
+Section 4 — À propos
+Présentation de l'équipe LIONTECH. Je vais te fournir les photos des membres. Voici les informations à intégrer :
+Membre	Rôle(s)	Portfolio
+Marthe Odonelle Njoya	Développeuse Fullstack	 https://odonelle2001.github.io/MarthePotfolio/index.html
+Ben FOCH	Développeur Web	https://benfochportfolio.iceiy.com/index.php#hero
+YONKOUE Njoya Emma	Designer Graphique	  https://porte-folio-4-0.vercel.app/
+•	Note : un membre peut avoir plusieurs rôles — développe les descriptions de rôle de manière professionnelle
+•	Chaque carte membre : photo, nom, rôle(s), lien vers portfolio, icônes réseaux sociaux
+•	D'autres membres pourront être ajoutés via l'interface admin
+________________________________________
+Section 5 — Contact
+•	Formulaire de contact : Nom, Email, Sujet, Message → enregistrement en base de données + envoi possible par mail (PHP mail ou PHPMailer)
+•	Liens directs Telegram et WhatsApp des administrateurs (numéros configurables depuis l'admin)
+•	Icônes des réseaux sociaux de LIONTECH (Facebook, Instagram, LinkedIn, GitHub, etc.)
+•	Adresse / localisation si disponible
+•	Pour l’instant voici les contacts possibles : 
+Email
+odonellenjoya83@gmail.com
+Phone
+(651) 347-9485
+LinkedIn
+marthe-odonelle-njoya
+GitHub
+Odonelle2001
+Handshake
+Marthe Odonelle Njoya
+Available for opportunities — Open to IT Support, Web Development, Front-end, and UI/UX roles. Response within 24 hours.
+________________________________________
+🔐 ESPACE ADMINISTRATEUR (privé)
+⚠️ La page admin ne doit en aucun cas être accessible ou référencée depuis la page utilisateur publique. L'URL d'accès est directe (ex : /admin/login.php).
+________________________________________
+Authentification
+•	Page de login sécurisée : identifiant + mot de passe (avec option pour voir le mot de passe saisi)
+•	Sessions PHP sécurisées
+•	Déconnexion avec destruction de session
+•	Compte admin principal par défaut : 
+o	Identifiant : Odonel
+o	Mot de passe : Odo2026
+________________________________________
+Dashboard Admin — Fonctionnalités
+1. Gestion des projets / Réalisations
+Ajouter / modifier / supprimer un projet avec :
+•	Catégorie : Design Graphique ou Plateforme Web
+•	Titre du projet
+•	Description
+•	Lien vers le projet
+•	Langages / outils utilisés
+•	Image du projet (upload)
+2. Gestion des membres de l'équipe
+•	Ajouter / modifier / supprimer un membre : 
+o	Nom complet, rôle(s), photo (upload), lien portfolio, réseaux sociaux
+•	L'admin peut ajouter d'autres membres après le lancement
+3. Gestion des administrateurs
+•	Un admin peut ajouter d'autres admins (nom, identifiant, mot de passe)
+•	Un admin peut modifier, voir son propre mot de passe
+4. Gestion des contacts / messages
+•	Visualisation des messages reçus via le formulaire de contact
+•	Marquage lu / non lu, suppression
+5. Paramètres du site
+•	Modifier les liens (Telegram et WhatsApp) , autres contacts aussi pourquoi pas, affichés dans la section contact
+•	Modifier les liens des réseaux sociaux de LIONTECH
+________________________________________
+🗄️ BASE DE DONNÉES MySQL
+Génère le fichier liontech.sql complet et commenté avec toutes les tables nécessaires, clés étrangères, et l'insertion du compte admin par défaut. 
+________________________________________
+🎨 Design & UX
+•	Thème clair / sombre fonctionnel sur toutes les pages (utilisateur + admin), persistant via localStorage
+•	Site entièrement responsive (mobile, tablette, desktop)
+•	Animations fluides au scroll et au survol
+•	Palette de couleurs moderne et professionnelle (tu peux proposer une palette adaptée à une agence tech)
+•	Cohérence visuelle entre la page publique et l'interface admin
+Instructions d'exécution sur WAMP Server (à inclure dans ta réponse)
+À la fin de ta réponse, explique clairement les étapes pour lancer le projet en local avec WAMP :
+1.	Placer le dossier liontech/ dans C:/wamp64/www/
+2.	Créer la base de données via phpMyAdmin et importer liontech.sql
+3.	Configurer les paramètres de connexion dans db.php
