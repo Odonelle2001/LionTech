@@ -14,8 +14,10 @@ $bp = BASE_PATH;
 <aside class="sidebar" id="sidebar">
   <div class="sidebar-logo">
     <img src="<?= $bp ?>/liontech-logo.jpg" alt="LIONTECH Logo" class="sidebar-logo-img">
-    <div class="logo-name">LIONTECH</div>
-    <div class="logo-sub">Administration</div>
+    <div class="sidebar-logo-text">
+      <div class="logo-name">LIONTECH</div>
+      <div class="logo-sub">Administration</div>
+    </div>
   </div>
 
   <div class="admin-info-box">

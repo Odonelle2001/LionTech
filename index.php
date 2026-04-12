@@ -187,7 +187,7 @@ function getSetting(string $key, string $default = ''): string {
           <div class="project-card reveal" data-category="<?= htmlspecialchars($project['category']) ?>">
             <div class="project-label"><?= htmlspecialchars($project['category']) ?></div>
             <div class="project-thumb">
-              <?php if (!empty($project['image']) && file_exists(__DIR__ . '/uploads/projects/' . $project['image'])): ?>
+              <?php if (!empty($project['image'])): ?>
                 <img src="<?= BASE_PATH ?>/uploads/projects/<?= htmlspecialchars($project['image']) ?>" alt="<?= htmlspecialchars($project['title']) ?>">
               <?php else: ?>
                 <div class="project-placeholder"><i class="fas fa-laptop-code"></i></div>
@@ -263,10 +263,10 @@ function getSetting(string $key, string $default = ''): string {
             <?php
               $photoSrc = '';
               if (!empty($member['photo'])) {
-                  if (file_exists(__DIR__ . '/' . $member['photo']))
-                      $photoSrc = BASE_PATH . '/' . htmlspecialchars($member['photo']);
-                  elseif (file_exists(__DIR__ . '/uploads/team/' . $member['photo']))
+                  if (strpos($member['photo'], 'team_') === 0)
                       $photoSrc = BASE_PATH . '/uploads/team/' . htmlspecialchars($member['photo']);
+                  else
+                      $photoSrc = BASE_PATH . '/' . htmlspecialchars($member['photo']);
               }
             ?>
             <?php if ($photoSrc): ?>

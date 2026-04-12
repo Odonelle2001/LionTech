@@ -182,7 +182,7 @@ $initials = strtoupper(substr($currentAdmin['username'] ?? 'A', 0, 1));
                   <?php foreach ($projects as $p): ?>
                     <tr>
                       <td>
-                        <?php if ($p['image'] && file_exists(__DIR__ . '/../uploads/projects/' . $p['image'])): ?>
+                        <?php if (!empty($p['image'])): ?>
                           <img src="<?= BASE_PATH ?>/uploads/projects/<?= htmlspecialchars($p['image']) ?>" class="table-avatar" style="border-radius:6px;width:48px;height:36px;object-fit:cover;">
                         <?php else: ?>
                           <div style="width:48px;height:36px;background:var(--bg);border:1px solid var(--border);border-radius:6px;display:grid;place-items:center;color:var(--muted);font-size:12px;"><i class="fas fa-image"></i></div>

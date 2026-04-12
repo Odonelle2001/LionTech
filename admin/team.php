@@ -191,11 +191,10 @@ $initials = strtoupper(substr($currentAdmin['username'] ?? 'A', 0, 1));
                         <?php
                         $photoPath = '';
                         if (!empty($m['photo'])) {
-                            if (file_exists(__DIR__ . '/../uploads/team/' . $m['photo'])) {
-                                $photoPath = '/uploads/team/' . $m['photo'];
-                            } elseif (file_exists(__DIR__ . '/../' . $m['photo'])) {
-                                $photoPath = '/' . $m['photo'];
-                            }
+                            if (strpos($m['photo'], 'team_') === 0)
+                                $photoPath = BASE_PATH . '/uploads/team/' . $m['photo'];
+                            else
+                                $photoPath = BASE_PATH . '/' . $m['photo'];
                         }
                         ?>
                         <?php if ($photoPath): ?>
