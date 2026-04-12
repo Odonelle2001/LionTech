@@ -42,7 +42,7 @@ a { text-decoration: none; color: inherit; }
 .navbar {
   width: 100%;
   padding: 16px 28px;
-  border-bottom: 1px solid var(--line);
+  border-bottom: 1rem solid var(--gold);
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -56,27 +56,47 @@ a { text-decoration: none; color: inherit; }
 
 .navbar.scrolled {
   box-shadow: 0 2px 20px rgba(0,0,0,0.4);
+  border-bottom: 2px solid var(--gold);
 }
 
 .logo-wrap { display: flex; align-items: center; gap: 10px; }
 
 .logo-circle {
-  width: 30px; height: 30px;
-  border: 1px solid var(--gold);
+  width: 60px; height: 60px;
+  border: 1rem solid var(--gold);
   border-radius: 50%;
   display: grid; place-items: center;
   font-size: 10px; color: var(--gold);
 }
 
 .logo-img {
-  width: 36px; height: 36px;
+  width: 60px; height: 60px;
   border-radius: 50%;
   object-fit: cover;
 }
+.logo-gold {
+  color: var(--gold);
+}
 
-.logo-text { font-size: 14px; letter-spacing: 3px; font-weight: 600; }
+.logo-text { font-size: 3rem; 
+  letter-spacing: 6px; 
+  font-weight: 800;
+  font-family: "Cormorant Garamond", serif; 
+    position: relative;
+  display: inline-block;
+}
 
-.nav-links { display: flex; gap: 28px; }
+.logo-text::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  bottom: -6px; /* space below text */
+  width: 100%;
+  height: 2px;
+  background: var(--gold);
+}
+
+.nav-links { display: flex; gap: 28px;margin-left: auto;  }
 
 .nav-links a {
   font-size: 12px;
@@ -103,7 +123,7 @@ a { text-decoration: none; color: inherit; }
 
 .icon-btn {
   background: transparent;
-  border: 1px solid var(--line);
+  border: .3rem solid var(--line);
   color: var(--white);
   width: 34px; height: 34px;
   border-radius: 50%;
@@ -256,14 +276,14 @@ a { text-decoration: none; color: inherit; }
   margin: 0 auto;
   display: grid;
   grid-template-columns: repeat(4, 1fr);
-  border-top: 1px solid var(--line);
-  border-bottom: 1px solid var(--line);
+  border-top: 0.5rem solid var(--line);
+  border-bottom: 0.5rem solid var(--line);
 }
 
 .stat-box {
   padding: 28px 20px;
   text-align: center;
-  border-right: 1px solid var(--line);
+  border-right: 0.5rem solid var(--line);
 }
 
 .stat-box:last-child { border-right: none; }
@@ -303,11 +323,11 @@ a { text-decoration: none; color: inherit; }
 /* ===== CARDS ===== */
 .card, .project-card, .process-card, .contact-form-box, .contact-note {
   background: var(--card);
-  border: 1px solid var(--line);
+  border: 0.4rem solid var(--line);
   transition: border-color 0.3s, transform 0.3s;
 }
 
-.card { padding: 32px 24px; text-align: left; min-height: 240px; }
+.card { padding: 24px 20px; text-align: left; min-height: 240px; }
 .card:hover { border-color: var(--gold); transform: translateY(-4px); }
 
 .card-icon { font-size: 1.4rem; color: var(--gold); margin-bottom: 14px; }
@@ -368,7 +388,7 @@ a { text-decoration: none; color: inherit; }
 .project-label {
   display: inline-block;
   color: var(--gold);
-  border: 1px solid var(--line);
+  border: 0.4rem solid var(--line);
   font-size: 10px;
   padding: 4px 10px;
   letter-spacing: 2px;
@@ -447,10 +467,49 @@ a { text-decoration: none; color: inherit; }
 
 .process-icon { font-size: 1.3rem; color: var(--gold); margin-bottom: 14px; }
 
+/* ===== CARD IMAGE ===== */
+.card-img {
+  width: 100%;
+  height: 200px;
+  overflow: hidden;
+  border-radius: 6px;
+  margin-bottom: 16px;
+  background: #0b0b0b;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* Default (real photos) */
+.card-img img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: center;
+}
+
+/* Special images (UI, ads, illustrations) */
+.card-img img.contain {
+  object-fit: contain;
+  padding: 10px;
+}
+
+/* Desktop */
+@media (min-width: 1024px) {
+  .card-img {
+    height: 220px;
+  }
+}
+
+/* Hover zoom effect */
+.card:hover .card-img img {
+  transform: scale(1.05);
+}
+
 /* ===== TEAM ===== */
 .team-card {
   background: var(--card);
-  border: 1px solid var(--line);
+  border: 0.4rem solid var(--line);
   text-align: center;
   padding: 36px 24px 28px;
   display: flex;
@@ -632,7 +691,7 @@ input:focus, select:focus, textarea:focus { border-color: var(--gold); }
 .form-msg.error { background: rgba(231,76,60,0.15); border: 1px solid #e74c3c; color: #e74c3c; }
 
 /* ===== FOOTER ===== */
-.footer { border-top: 1px solid var(--line); text-align: center; padding: 36px 20px; }
+.footer { border-top: 1rem solid var(--gold); text-align: center; padding: 36px 20px; }
 
 .footer-logo {
   font-family: "Cormorant Garamond", serif;
@@ -695,9 +754,146 @@ input:focus, select:focus, textarea:focus { border-color: var(--gold); }
   .nav-links a { padding: 10px 0; font-size: 13px; }
   .hamburger { display: flex; }
   .services-grid, .process-grid, .stats { grid-template-columns: 1fr; }
-  .stat-box { border-right: none; border-bottom: 1px solid var(--line); }
+  .stat-box { border-right: none; border-bottom: 0.5rem solid var(--line); }
   .stat-box:last-child { border-bottom: none; }
   .row { grid-template-columns: 1fr; }
   .hero { padding-top: 70px; }
   .contact-quick { flex-direction: column; }
+}
+/* ===== DESKTOP FULL-WIDTH + BIGGER TEXT ===== */
+@media (min-width: 1024px) {
+  body {
+    font-size: 2rem;
+  }
+
+  .navbar {
+    padding: 24px 60px;
+  }
+
+  .logo-text {
+    font-size: 2rem;
+  }
+
+  .nav-links {
+    gap: 40px;
+  }
+
+  .nav-links a,
+  .lang-btn-toggle,
+  .btn,
+  .filter-btn,
+  .project-card a,
+  .footer-links a,
+  .footer p {
+    font-size: 2rem;
+    letter-spacing: 1px;
+  }
+
+  .icon-btn {
+    width: 52px;
+    height: 52px;
+    font-size: 1.4rem;
+  }
+
+  .hero,
+  .section,
+  .stats,
+  .contact-section {
+    max-width: 100%;
+    width: 100%;
+    margin: 0;
+    padding-left: 60px;
+    padding-right: 60px;
+  }
+
+  .hero {
+    text-align: left;
+    padding-top: 140px;
+    padding-bottom: 120px;
+  }
+
+  .hero-text,
+  .section-subtext,
+  .contact-left > p,
+  .no-content,
+  .card p,
+  .project-card p,
+  .process-card p,
+  .contact-note p,
+  .team-card p,
+  .contact-info p,
+  input,
+  select,
+  textarea {
+    font-size: 2rem;
+    max-width: 100%;
+  }
+
+  .hero h1,
+  .section h2,
+  .contact-left h2 {
+    font-size: 4.5rem;
+    line-height: 1.15;
+  }
+
+  .mini-badge,
+  .section-tag,
+  .project-label,
+  .badge,
+  .team-role,
+  .stat-box p {
+    font-size: 1.2rem;
+  }
+
+  .card h3,
+  .project-card h3,
+  .process-card h3,
+  .contact-form-box h3,
+  .contact-note h4,
+  .team-card h3 {
+    font-size: 2.5rem;
+  }
+
+  .card,
+  .project-card,
+  .process-card,
+  .team-card,
+  .contact-form-box,
+  .contact-note {
+    padding: 36px;
+  }
+
+  .project-thumb {
+    height: 320px;
+  }
+
+  .team-photo {
+    width: 220px;
+    height: 220px;
+  }
+
+  .services-grid,
+  .projects-grid,
+  .process-grid,
+  .team-grid {
+    gap: 32px;
+  }
+
+  .row {
+    gap: 20px;
+  }
+
+  input,
+  select,
+  textarea {
+    padding: 20px;
+  }
+
+  .btn {
+    padding: 18px 34px;
+  }
+
+  .footer {
+    padding: 50px 60px;
+  }
 }
