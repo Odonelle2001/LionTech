@@ -33,7 +33,7 @@ function getSetting(string $key, string $default = ''): string {
   <header class="navbar" id="navbar">
     <div class="logo-wrap">
       <img src="liontech-logo.jpg" alt="LIONTECH Logo" class="logo-img">
-      <div class="logo-text">LIONTECH</div>
+      <div class="logo-text"> LION<span class="logo-gold">TECH</span></div>
     </div>
 
     <button class="hamburger" id="hamburger" aria-label="Menu">
@@ -80,7 +80,7 @@ function getSetting(string $key, string $default = ''): string {
   <!-- STATS -->
   <section class="stats">
     <div class="stat-box">
-      <h3>40+</h3>
+      <h3>10+</h3>
       <p data-fr="Projets livrés" data-en="Projects delivered">Projets livrés</p>
     </div>
     <div class="stat-box">
@@ -107,36 +107,54 @@ function getSetting(string $key, string $default = ''): string {
 
     <div class="services-grid">
       <div class="card reveal">
+         <div class="card-img">
+        <img src="photos/web.jpeg" alt="Web">
+      </div>
         <div class="card-icon"><i class="fas fa-code"></i></div>
         <div class="card-number">01</div>
         <h3 data-fr="Sites Vitrines" data-en="Showcase Websites">Sites Vitrines</h3>
         <p data-fr="Sites professionnels, rapides et adaptés au mobile qui représentent votre marque 24h/24." data-en="Professional, fast and mobile-friendly websites that represent your brand 24/7.">Sites professionnels, rapides et adaptés au mobile qui représentent votre marque 24h/24.</p>
       </div>
       <div class="card reveal">
+         <div class="card-img">
+        <img src="photos/Application.jpeg" alt="App">
+      </div>
         <div class="card-icon"><i class="fas fa-layer-group"></i></div>
         <div class="card-number">02</div>
         <h3 data-fr="Plateformes Web & Apps" data-en="Web Platforms & Apps">Plateformes Web & Apps</h3>
         <p data-fr="Applications web sur mesure, dashboards, e-commerce et systèmes de gestion adaptés à vos besoins." data-en="Custom web applications, dashboards, e-commerce and management systems tailored to your needs.">Applications web sur mesure, dashboards, e-commerce et systèmes de gestion adaptés à vos besoins.</p>
       </div>
       <div class="card reveal">
+        <div class="card-img">
+        <img src="photos/Card3UI.jpeg" alt="Design">
+      </div>
         <div class="card-icon"><i class="fas fa-palette"></i></div>
         <div class="card-number">03</div>
         <h3 data-fr="Design Graphique & UI/UX" data-en="Graphic Design & UI/UX">Design Graphique & UI/UX</h3>
         <p data-fr="Logos, identité visuelle, maquettes et interfaces utilisateur élégantes et intuitives." data-en="Logos, visual identity, mockups and elegant, intuitive user interfaces.">Logos, identité visuelle, maquettes et interfaces utilisateur élégantes et intuitives.</p>
       </div>
       <div class="card reveal">
+         <div class="card-img">
+        <img src="photos/MarketingDigital.jpeg" alt="Marketing">
+      </div>
         <div class="card-icon"><i class="fas fa-bullhorn"></i></div>
         <div class="card-number">04</div>
         <h3 data-fr="Marketing Digital" data-en="Digital Marketing">Marketing Digital</h3>
         <p data-fr="Réseaux sociaux, email, SEO et campagnes Google/Facebook pour atteindre vos clients efficacement." data-en="Social media, email, SEO and Google/Facebook campaigns to reach your clients effectively.">Réseaux sociaux, email, SEO et campagnes Google/Facebook pour atteindre vos clients efficacement.</p>
       </div>
       <div class="card reveal">
+         <div class="card-img">
+        <img src="photos/Maintenance.jpeg" alt="Support">
+      </div>
         <div class="card-icon"><i class="fas fa-tools"></i></div>
         <div class="card-number">05</div>
         <h3 data-fr="Maintenance & Support" data-en="Maintenance & Support">Maintenance & Support</h3>
         <p data-fr="Mises à jour, corrections de bugs, sauvegardes et support technique réactif pour votre tranquillité." data-en="Updates, bug fixes, backups and responsive technical support for your peace of mind.">Mises à jour, corrections de bugs, sauvegardes et support technique réactif pour votre tranquillité.</p>
       </div>
       <div class="card reveal">
+         <div class="card-img">
+        <img src="photos/Publicite.jpeg" alt="Ads">
+      </div>
         <div class="card-icon"><i class="fas fa-chart-line"></i></div>
         <div class="card-number">06</div>
         <h3 data-fr="Publicité en Ligne" data-en="Online Advertising">Publicité en Ligne</h3>
