@@ -1,0 +1,183 @@
+/* ───────────────────────────────
+   SIDEBAR — LionRDV Admin
+   Clean standalone version
+─────────────────────────────── */
+
+:root {
+  --black: #070707;
+  --gold: #c9a43b;
+  --white: #ffffff;
+  --sidebar-line: #1d1d1d;
+  --muted: #7d766f;
+}
+
+/* SIDEBAR WRAPPER */
+.sidebar {
+  width: 310px;
+  background: var(--black);
+  color: #d1d1d1;
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
+  border-right: 1px solid #111;
+}
+
+/* BRAND */
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 28px;
+  border-bottom: 1px solid var(--sidebar-line);
+}
+
+.logo-img {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  object-fit: cover;
+}
+
+.brand-text h1 {
+  font-size: 1.3rem;
+  color: var(--white);
+  line-height: 1;
+}
+
+.brand-text h1 span {
+  color: var(--gold);
+}
+
+.brand-text p {
+  margin-top: 4px;
+  font-size: 0.75rem;
+  letter-spacing: 2px;
+  color: #777;
+}
+
+/* SECTIONS */
+.sidebar-section {
+  padding-top: 22px;
+}
+
+.section-label {
+  padding: 0 28px 12px;
+  font-size: 0.75rem;
+  letter-spacing: 4px;
+  color: #666;
+}
+
+/* LINKS */
+.nav-link {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 14px 28px;
+  color: #909090;
+  text-decoration: none;
+  border-top: 1px solid rgba(255,255,255,0.02);
+  border-bottom: 1px solid rgba(255,255,255,0.02);
+  transition: 0.2s ease;
+}
+
+.nav-link span:first-of-type {
+  flex: 1;
+}
+
+.nav-link:hover {
+  background: rgba(255,255,255,0.04);
+  color: #fff;
+}
+
+.nav-link.active {
+  background: rgba(201,164,59,0.14);
+  color: var(--gold);
+  border-left: 2px solid var(--gold);
+}
+
+/* BADGES */
+.pill {
+  min-width: 24px;
+  height: 22px;
+  border-radius: 999px;
+  display: grid;
+  place-items: center;
+  padding: 0 8px;
+  font-weight: 700;
+  font-size: 0.78rem;
+}
+
+.pill.gold { background: var(--gold); color: #111; }
+.pill.blue { background: #3c82ff; color: #fff; }
+.pill.red  { background: #ff4d4d; color: #fff; }
+
+/* ADD BUTTON */
+.add-btn {
+  width: calc(100% - 36px);
+  margin: 12px 18px;
+  padding: 12px 18px;
+  border-radius: 12px;
+  border: 1.5px solid rgba(201,164,59,0.5);
+  background: transparent;
+  color: var(--gold);
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  cursor: pointer;
+  font-weight: 700;
+  transition: 0.2s ease;
+}
+
+.add-btn:hover {
+  background: rgba(201,164,59,0.08);
+}
+
+/* FOOTER */
+.sidebar-footer {
+  margin-top: auto;
+  padding: 20px 28px;
+  border-top: 1px solid var(--sidebar-line);
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.footer-badge {
+  width: 38px;
+  height: 38px;
+  border-radius: 10px;
+  background: var(--gold);
+  color: #111;
+  display: grid;
+  place-items: center;
+  font-weight: 800;
+}
+
+.sidebar-footer h4 {
+  color: var(--white);
+  font-size: 0.9rem;
+}
+
+.sidebar-footer p {
+  color: #818181;
+  font-size: 0.78rem;
+}
+
+/* RESPONSIVE COLLAPSE */
+@media (max-width: 980px) {
+  .sidebar {
+    width: 70px;
+  }
+
+  .sidebar .brand-text,
+  .sidebar .section-label,
+  .sidebar .nav-link span,
+  .sidebar-footer h4,
+  .sidebar-footer p {
+    display: none;
+  }
+
+  .add-btn span {
+    display: none;
+  }
+}
