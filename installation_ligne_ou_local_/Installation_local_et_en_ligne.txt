@@ -1,0 +1,59 @@
+Étapes pour faire tourner le projet sur WAMP avec MySQL
+1. Copier les fichiers dans WAMP
+Télécharge tous les fichiers du projet et place le dossier dans :
+
+C:\wamp64\www\LionTechV2\
+
+2. Démarrer WAMP
+Lance WAMP et assure-toi que l'icône est verte (Apache + MySQL actifs).
+
+3. Créer la base de données dans phpMyAdmin
+Ouvre : http://localhost/phpmyadmin
+Clique sur "Nouvelle base de données"
+Nom : liontech
+Interclassement : utf8mb4_unicode_ci
+Clique sur Créer
+4. Initialiser les tables et les données
+Ouvre dans ton navigateur :
+
+http://localhost/LionTechV2/init-db.php
+
+Ce script va créer toutes les tables et insérer les données de départ automatiquement.
+
+5. Supprimer init-db.php ⚠️
+Après l'initialisation, supprime ou renomme ce fichier pour des raisons de sécurité. Il ne doit pas rester accessible en production.
+
+6. Accéder au site
+Site public : http://localhost/LionTechV2/
+Administration : http://localhost/LionTechV2/admin/login.php
+Identifiant : Odonel
+Mot de passe : Odo2026
+Si tu as changé le mot de passe root de MySQL dans WAMP, ouvre simplement config.php et mets à jour la ligne DB_PASS avec ton mot de passe.
+
+
+
+INSTALLATION EN LIGNE 
+
+
+
+Ici, on peut importer liontech.sql directement dans phpMyAdmin sur Aeronfree, mais avec une petite attention :
+
+Le fichier SQL ne crée pas le compte admin automatiquement — cette ligne est commentée dans le fichier parce que le mot de passe nécessite un hash PHP. Donc après l'import du SQL, tu n'auras pas de compte admin pour te connecter.
+
+On a deux options :
+
+Option A (la plus simple) — utiliser quand même init-db.php juste une fois
+C'est la méthode recommandée car elle crée tout automatiquement, y compris le compte Odonel / Odo2026. On supprime le fichier juste après.
+
+Option B — importer le SQL + créer l'admin manuellement
+
+Importe liontech.sql dans phpMyAdmin sur Aeronfree
+Dans phpMyAdmin, on part dans l'onglet SQL et exécute cette requête en remplaçant HASH par le hash généré :
+D'abord, on génère le hash en ouvrant temporairement un fichier PHP sur ton hébergement avec ce contenu :
+<?php echo password_hash('Odo2026', PASSWORD_DEFAULT); ?>
+
+Copie le hash affiché, puis exécute dans phpMyAdmin :
+INSERT INTO admins (username, password_hash, full_name)
+VALUES ('Odonel', 'HASH_COPIÉ_ICI', 'Marthe Odonelle Njoya');
+
+En résumé : init-db.php reste la méthode la plus simple, car elle fait tout en un clic. L'import SQL seul ne suffit pas pour avoir le compte admin.
