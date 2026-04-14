@@ -97,6 +97,27 @@ $alertCount = 2;
               </div>
             </div>
           </div>
+          
+          <div class="form-group full-width">
+  <label>Accès propriétaire</label>
+  <div class="owner-access-box">
+    <div class="owner-access-info">
+      <div class="owner-access-icon">
+        <i class="fa-solid fa-lock"></i>
+      </div>
+      <div>
+        <div class="owner-access-title">Connexion espace propriétaire</div>
+        <div class="owner-access-sub">Ce bouton apparaîtra sur la page du business après création</div>
+      </div>
+    </div>
+    <a href="/LionRDV/Clien%20de%20LionTech/ClientLion.php" 
+       target="_blank" 
+       class="owner-connexion-btn">
+      <i class="fa-solid fa-right-to-bracket"></i>
+      Connexion
+    </a>
+  </div>
+</div>
 
           <!-- SECTION 2 -->
           <div class="form-card">
@@ -548,7 +569,7 @@ $alertCount = 2;
 
             <div class="form-grid">
               <div class="form-group">
-                <label for="login_email">Email de connexion</label>
+                <label for="login_email">Whatsapp numb</label>
                 <input type="email" id="login_email" placeholder="nora@email.com">
               </div>
 
