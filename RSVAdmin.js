@@ -5,6 +5,7 @@
 const businesses = [
   {
     name: "Nora Beauty",
+    slug: "nora-beauty",
     city: "Bastos, Yaoundé",
     type: "Beauté",
     rdv: 48,
@@ -16,6 +17,7 @@ const businesses = [
   },
   {
     name: "Le Palmier",
+    slug: "le-palmier",
     city: "Akwa, Douala",
     type: "Restaurant",
     rdv: 94,
@@ -27,6 +29,7 @@ const businesses = [
   },
   {
     name: "Clinique Santé+",
+    slug: "clinique-sante",
     city: "Centre, Yaoundé",
     type: "Médical",
     rdv: 76,
@@ -38,6 +41,7 @@ const businesses = [
   },
   {
     name: "Barber Kings",
+    slug: "barber-kings",
     city: "Mvog-Ada, Ydé",
     type: "Barbier",
     rdv: 12,
@@ -49,6 +53,7 @@ const businesses = [
   },
   {
     name: "Studio Lumière",
+    slug: "studio-lumiere",
     city: "Bonanjo, Douala",
     type: "Photo",
     rdv: "—",
@@ -95,14 +100,32 @@ function renderBusinesses() {
           <td class="plan-price">${item.plan}</td>
           <td>
             <div class="action-buttons">
-              <button class="action-btn">Éditer</button>
-              <button class="action-btn">Voir</button>
+              <button class="action-btn" onclick="editBusiness('${item.slug}')">
+                <i class="fa-solid fa-pen-to-square"></i> Éditer
+              </button>
+              <button class="action-btn action-btn-view" onclick="viewPage('${item.slug}')">
+                <i class="fa-solid fa-eye"></i> Voir page
+              </button>
             </div>
           </td>
         </tr>
       `
     )
     .join("");
+}
+
+/* ── VIEW — opens Utulisateur.php in a new tab ── */
+function viewPage(slug) {
+  window.open(
+    '/LionRDV/Utulisateur.php?slug=' + slug,
+    '_blank'
+  );
+}
+
+/* ── EDIT — opens AjouterBussiness pre-filled ── */
+function editBusiness(slug) {
+  window.location.href =
+    '/LionRDV/AjouterBussiness/AjouterBussiness.php?edit=' + slug;
 }
 
 /* ============================================================
@@ -289,10 +312,8 @@ document.addEventListener("DOMContentLoaded", function () {
 
 /* ============================================================
    Ajouter Business — Logo preview + Create button + Copy link
-   (matches AjouterBussiness.php output box)
 ============================================================ */
 
-/* Logo preview — called by onchange="previewLogo(this)" on the file input */
 function previewLogo(input) {
   if (!input.files || !input.files[0]) return;
 
@@ -306,7 +327,6 @@ function previewLogo(input) {
   reader.readAsDataURL(input.files[0]);
 }
 
-/* Copy booking link to clipboard */
 function copyLink() {
   var link = document.getElementById("out-link");
   if (!link) return;
@@ -316,7 +336,6 @@ function copyLink() {
       alert("✓ Lien copié !");
     });
   } else {
-    /* fallback for older browsers */
     var ta        = document.createElement("textarea");
     ta.value      = text;
     ta.style.position = "fixed";
@@ -329,7 +348,6 @@ function copyLink() {
   }
 }
 
-/* Create button — fills and shows the output box */
 document.addEventListener("DOMContentLoaded", function () {
 
   var createBtn = document.getElementById("create-btn");
@@ -338,26 +356,22 @@ document.addEventListener("DOMContentLoaded", function () {
   createBtn.addEventListener("click", function () {
     var btn = this;
 
-    /* loading state */
-    btn.disabled     = true;
-    btn.innerHTML    = '<i class="fa-solid fa-spinner fa-spin"></i> Création en cours...';
+    btn.disabled         = true;
+    btn.innerHTML        = '<i class="fa-solid fa-spinner fa-spin"></i> Création en cours...';
     btn.style.background = "#555";
     btn.style.color      = "#fff";
 
     setTimeout(function () {
 
-      /* success state */
       btn.innerHTML        = '<i class="fa-solid fa-circle-check"></i> Compte créé !';
       btn.style.background = "#059669";
       btn.style.color      = "#fff";
 
-      /* read form values */
-      var slug  = (document.getElementById("subdomain")      || {}).value || "mon-business";
-      var name  = (document.getElementById("business_name")  || {}).value || "Mon Business";
-      var email = (document.getElementById("login_email")    || {}).value || "—";
-      var pwd   = (document.getElementById("temp_password")  || {}).value || "—";
+      var slug  = (document.getElementById("subdomain")     || {}).value || "mon-business";
+      var name  = (document.getElementById("business_name") || {}).value || "Mon Business";
+      var email = (document.getElementById("login_email")   || {}).value || "—";
+      var pwd   = (document.getElementById("temp_password") || {}).value || "—";
 
-      /* populate output box */
       var outLink = document.getElementById("out-link");
       var outName = document.getElementById("out-biz-name");
       var outSub  = document.getElementById("out-biz-sub");
@@ -370,7 +384,6 @@ document.addEventListener("DOMContentLoaded", function () {
       if (outMail) outMail.textContent = email;
       if (outPwd)  outPwd.textContent  = pwd;
 
-      /* show output box and scroll to it */
       var outBox = document.getElementById("out-box");
       if (outBox) {
         outBox.classList.add("show");

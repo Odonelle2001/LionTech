@@ -37,6 +37,7 @@ button, input, select, textarea { font-family: inherit;font-size: 2rem; }
   --shadow-sm:  0 1px 3px rgba(0,0,0,0.08);
   --shadow-md:  0 4px 16px rgba(0,0,0,0.10);
   --t:          0.18s ease;
+  
 }
 
 /* ═══════════════════════════════════════════
@@ -1049,3 +1050,131 @@ body.is-dashboard {
 * { scrollbar-width: thin; scrollbar-color: var(--border) transparent; }
 *::-webkit-scrollbar { width: 4px; }
 *::-webkit-scrollbar-thumb { background: var(--border); border-radius: 4px; }
+
+/* ── GALLERY UPLOAD SECTION (ClientLion) ── */
+.gallery-upload-section {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+  margin-bottom: 16px;
+}
+
+.gallery-upload-header {
+  padding: 12px 16px;
+  background: var(--off-white);
+  border-bottom: 1px solid var(--border);
+}
+
+.gallery-upload-title {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--black);
+}
+
+.gallery-upload-sub {
+  font-size: 10px;
+  color: var(--muted);
+  margin-top: 3px;
+}
+
+.gallery-existing {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--border);
+}
+
+.gallery-thumb-wrap {
+  position: relative;
+  width: 70px;
+  height: 70px;
+  border-radius: 8px;
+  overflow: hidden;
+  flex-shrink: 0;
+}
+
+.gallery-thumb {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.gallery-delete-btn {
+  position: absolute;
+  top: 3px;
+  right: 3px;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: rgba(220,38,38,0.85);
+  color: #fff;
+  border: none;
+  font-size: 9px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.15s;
+}
+.gallery-delete-btn:hover { background: #DC2626; }
+
+.gallery-empty {
+  padding: 24px 16px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  font-size: 12px;
+  color: var(--muted);
+  border-bottom: 1px solid var(--border);
+}
+
+.gallery-upload-btn {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 12px 16px;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+  border-top: 1px dashed;
+  transition: background 0.15s;
+}
+.gallery-upload-btn:hover { background: var(--off-white); }
+
+.gallery-preview-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 8px 16px;
+}
+
+.gallery-preview-thumb {
+  width: 60px;
+  height: 60px;
+  border-radius: 6px;
+  object-fit: cover;
+  border: 1.5px solid var(--border);
+}
+
+.gallery-save-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  width: calc(100% - 32px);
+  margin: 8px 16px 14px;
+  padding: 11px;
+  border: none;
+  border-radius: var(--radius-md);
+  color: #fff;
+  font-size: 12px;
+  font-weight: 800;
+  cursor: pointer;
+  transition: filter 0.15s;
+}
+.gallery-save-btn:hover { filter: brightness(1.08); }
