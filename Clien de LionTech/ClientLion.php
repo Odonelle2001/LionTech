@@ -1,1043 +1,1122 @@
 <?php
-session_start();
-
 /* ============================================================
-   ClientLion.php — LionRDV Owner Dashboard
-   Nouveautés : upload galerie + save disponibilités → JSON
-============================================================ */
+   ClientLion.php — Espace Propriétaire LionRDV
+   Connexion : WhatsApp + mot de passe (pas d'email)
+   Lié à : businesses + owners + services + availability + gallery + reservations
+   ============================================================ */
+session_start();
+ini_set('display_errors', 1);
+error_reporting(E_ALL);
+require_once __DIR__ . '/../db.php';
 
-/* ── DATA DIR ──────────────────────────────────────────── */
-$data_dir = 'C:/Xampp/htdocs/LionRDV/data';
+/* ── helpers ────────────────────────────────────────────── */
+function h(?string $v): string { return htmlspecialchars((string)$v, ENT_QUOTES, 'UTF-8'); }
+function toSlug(string $s): string { return preg_replace('/-+/','-',preg_replace('/[^a-z0-9\-]/','',strtolower(trim(str_replace(' ','-',$s))))); }
 
-/* ── MOCK AUTH ─────────────────────────────────────────── */
-$demo_owners = [
-  'nora@beauty.cm' => [
-    'password'    => 'Lion2026!',
-    'name'        => 'Nora Beauty',
-    'initials'    => 'NB',
-    'type'        => 'Salon de beauté',
-    'location'    => 'Bastos, Yaoundé',
-    'theme_color' => '#D4447A',
-    'theme_bg'    => '#FFF0F8',
-    'plan'        => 'Standard',
-    'slug'        => 'nora-beauty',
-    'whatsapp'    => '+237699001122',
-  ],
-];
+/* ── session state ──────────────────────────────────────── */
+$logged        = !empty($_SESSION['cl_owner_id']);
+$owner_id      = (int)($_SESSION['cl_owner_id'] ?? 0);
+$biz_id        = (int)($_SESSION['cl_biz_id']   ?? 0);
+$must_onboard  = !empty($_SESSION['cl_onboard']);   /* onboarding en cours */
+$onboard_step  = (int)($_SESSION['cl_onboard_step'] ?? 1);
+$error         = '';
+$success       = '';
 
-$error  = '';
-$logged = isset($_SESSION['owner_logged']) && $_SESSION['owner_logged'] === true;
-$owner  = $logged ? $_SESSION['owner_data'] : null;
-
-/* ── HELPER: load/save business JSON ───────────────────── */
-function load_business($slug, $data_dir) {
-  $file = $data_dir . '/' . $slug . '.json';
-  if (!file_exists($file)) return [];
-  return json_decode(file_get_contents($file), true) ?? [];
+/* ── upload helpers ─────────────────────────────────────── */
+function upload_file(array $file, string $slug, string $subdir, string $prefix): ?string {
+  if (empty($file['tmp_name']) || !is_uploaded_file($file['tmp_name'])) return null;
+  $ext = strtolower(pathinfo($file['name'], PATHINFO_EXTENSION));
+  if (!in_array($ext, ['jpg','jpeg','png','webp'])) return null;
+  $dir = dirname(__DIR__) . '/uploads/' . $slug . '/' . $subdir . '/';
+  if (!is_dir($dir)) mkdir($dir, 0755, true);
+  $name = $prefix . '_' . time() . '.' . $ext;
+  return move_uploaded_file($file['tmp_name'], $dir . $name) ? 'uploads/' . $slug . '/' . $subdir . '/' . $name : null;
 }
 
-function save_business($slug, $data, $data_dir) {
-  if (!is_dir($data_dir)) mkdir($data_dir, 0755, true);
-  $file = $data_dir . '/' . $slug . '.json';
-  /* Merge with existing so we don't overwrite other fields */
-  $existing = [];
-  if (file_exists($file)) {
-    $existing = json_decode(file_get_contents($file), true) ?? [];
-  }
-  $merged = array_merge($existing, $data);
-  return file_put_contents($file, json_encode($merged, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE)) !== false;
+/* ── load owner + business from DB ─────────────────────── */
+function load_owner_biz(PDO $pdo, int $owner_id): ?array {
+  $st = $pdo->prepare(
+    "SELECT o.*, b.id AS biz_id, b.slug, b.name AS biz_name, b.initials,
+            b.type AS biz_type, b.theme_color, b.button_color, b.plan,
+            b.whatsapp AS biz_wa, b.city, b.neighborhood,
+            b.gal_max_photos, b.gal_display_mode, b.show_connexion_btn,
+            b.svc_display_style, b.language, b.global_font
+     FROM owners o JOIN businesses b ON b.id = o.business_id
+     WHERE o.id = ?"
+  );
+  $st->execute([$owner_id]);
+  return $st->fetch(PDO::FETCH_ASSOC) ?: null;
 }
 
-/* ── HANDLE ALL POST ACTIONS ────────────────────────────── */
-if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
+/* ════════════════════════════════════════════════════════
+   HANDLE ALL POST ACTIONS
+════════════════════════════════════════════════════════ */
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && !empty($_POST['action'])) {
+  $action = $_POST['action'];
 
-  /* LOGIN */
-  if ($_POST['action'] === 'login') {
-    $email = trim($_POST['email'] ?? '');
-    $pwd   = trim($_POST['password'] ?? '');
-    if (isset($demo_owners[$email]) && $demo_owners[$email]['password'] === $pwd) {
-      $_SESSION['owner_logged'] = true;
-      $_SESSION['owner_data']   = $demo_owners[$email];
-      $_SESSION['owner_email']  = $email;
-      header('Location: ClientLion.php');
-      exit;
+  /* ── LOGIN ──────────────────────────────────────────── */
+  if ($action === 'login') {
+    $wa  = preg_replace('/\D/', '', trim($_POST['whatsapp'] ?? ''));
+    $pwd = trim($_POST['password'] ?? '');
+    $st  = $pdo->prepare("SELECT * FROM owners WHERE whatsapp = ?");
+    $st->execute([$wa]);
+    $row = $st->fetch(PDO::FETCH_ASSOC);
+    if ($row && password_verify($pwd, $row['password_hash'])) {
+      $_SESSION['cl_owner_id'] = $row['id'];
+      $_SESSION['cl_biz_id']   = $row['business_id'];
+      if (!empty($row['must_change_pwd'])) {
+        $_SESSION['cl_onboard']      = true;
+        $_SESSION['cl_onboard_step'] = 1;
+      }
+      header('Location: ClientLion.php'); exit;
     } else {
-      $error = 'Email ou mot de passe incorrect.';
+      $error = 'Numéro WhatsApp ou mot de passe incorrect.';
     }
   }
 
-  /* LOGOUT */
-  if ($_POST['action'] === 'logout') {
-    session_destroy();
-    header('Location: ClientLion.php');
-    exit;
+  /* ── LOGOUT ─────────────────────────────────────────── */
+  if ($action === 'logout' && $logged) {
+    session_destroy(); header('Location: ClientLion.php'); exit;
   }
 
-  /* ── SAVE AVAILABILITY ──────────────────────────────────
-     Called when owner clicks "Enregistrer les disponibilités"
-  ─────────────────────────────────────────────────────── */
-  if ($_POST['action'] === 'save_availability' && $logged) {
-    $slug = $owner['slug'];
+  /* From here all actions require login */
+  if ($logged) {
+    $data = load_owner_biz($pdo, $owner_id);
+    $bid  = $data['biz_id'] ?? $biz_id;
+    $slug = $data['slug'] ?? '';
 
-    $days_fr = ['Lundi','Mardi','Mercredi','Jeudi','Vendredi','Samedi','Dimanche'];
-    $days_en = ['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday'];
-
-    $availability = [];
-    foreach ($days_en as $i => $day_en) {
-      $key   = strtolower($day_en);
-      $open  = isset($_POST['open_' . $key]) && $_POST['open_' . $key] === '1';
-      $start = $_POST['start_' . $key] ?? '08:00';
-      $end   = $_POST['end_' . $key]   ?? '18:00';
-      $availability[] = [
-        'day'    => $days_fr[$i],
-        'day_en' => $day_en,
-        'open'   => $open,
-        'start'  => $open ? $start : '',
-        'end'    => $open ? $end   : '',
-      ];
-    }
-
-    $ok = save_business($slug, ['availability' => $availability], $data_dir);
-    $_SESSION['flash'] = $ok
-      ? ['type'=>'success','msg'=>'Disponibilités enregistrées !']
-      : ['type'=>'error',  'msg'=>'Erreur lors de la sauvegarde.'];
-
-    header('Location: ClientLion.php#avail');
-    exit;
-  }
-
-  /* ── UPLOAD GALLERY PHOTOS ──────────────────────────────
-     Called when owner uploads photos in Mon profil
-  ─────────────────────────────────────────────────────── */
-  if ($_POST['action'] === 'upload_gallery' && $logged) {
-    $slug       = $owner['slug'];
-    $upload_dir = 'C:/Xampp/htdocs/LionRDV/uploads/' . $slug . '/gallery/';
-
-    if (!is_dir($upload_dir)) mkdir($upload_dir, 0755, true);
-
-    /* Load existing gallery */
-    $biz     = load_business($slug, $data_dir);
-    $gallery = $biz['gallery'] ?? [];
-
-    $allowed = ['image/jpeg','image/png','image/webp','image/gif'];
-    $uploaded = 0;
-
-    if (!empty($_FILES['gallery_photos']['tmp_name'])) {
-      $files = $_FILES['gallery_photos'];
-      $count = is_array($files['tmp_name']) ? count($files['tmp_name']) : 1;
-
-      for ($i = 0; $i < $count; $i++) {
-        $tmp  = is_array($files['tmp_name']) ? $files['tmp_name'][$i] : $files['tmp_name'];
-        $name = is_array($files['name'])     ? $files['name'][$i]     : $files['name'];
-        $type = is_array($files['type'])     ? $files['type'][$i]     : $files['type'];
-        $err  = is_array($files['error'])    ? $files['error'][$i]    : $files['error'];
-
-        if ($err !== UPLOAD_ERR_OK) continue;
-        if (!in_array($type, $allowed))    continue;
-
-        $ext      = pathinfo($name, PATHINFO_EXTENSION);
-        $filename = 'photo_' . time() . '_' . $i . '.' . $ext;
-        $dest     = $upload_dir . $filename;
-
-        if (move_uploaded_file($tmp, $dest)) {
-          $gallery[] = [
-            'path' => 'uploads/' . $slug . '/gallery/' . $filename,
-            'alt'  => $owner['name'],
-          ];
-          $uploaded++;
-        }
+    /* ── ONBOARD STEP 1: change password ───────────────── */
+    if ($action === 'onboard_password') {
+      $new  = trim($_POST['new_password'] ?? '');
+      $conf = trim($_POST['confirm_password'] ?? '');
+      if (strlen($new) < 8) { $error = 'Le mot de passe doit faire au moins 8 caractères.'; }
+      elseif ($new !== $conf) { $error = 'Les mots de passe ne correspondent pas.'; }
+      else {
+        $pdo->prepare("UPDATE owners SET password_hash=?, must_change_pwd=0 WHERE id=?")
+            ->execute([password_hash($new, PASSWORD_DEFAULT), $owner_id]);
+        $_SESSION['cl_onboard_step'] = 2;
+        $success = 'Mot de passe mis à jour.';
       }
     }
 
-    $ok = save_business($slug, ['gallery' => $gallery], $data_dir);
-    $_SESSION['flash'] = $ok && $uploaded > 0
-      ? ['type'=>'success','msg'=> $uploaded . ' photo(s) ajoutée(s) à la galerie !']
-      : ['type'=>'error',  'msg'=>'Aucune photo uploadée.'];
+    /* ── ONBOARD STEP 2: save availability ─────────────── */
+    if ($action === 'onboard_availability' || $action === 'save_availability') {
+      $days = ['monday','tuesday','wednesday','thursday','friday','saturday','sunday'];
+      $pdo->prepare("DELETE FROM availability WHERE business_id=?")->execute([$bid]);
+      $fr_names = ['monday'=>'Lundi','tuesday'=>'Mardi','wednesday'=>'Mercredi',
+                   'thursday'=>'Jeudi','friday'=>'Vendredi','saturday'=>'Samedi','sunday'=>'Dimanche'];
+      $en_names = ['monday'=>'Monday','tuesday'=>'Tuesday','wednesday'=>'Wednesday',
+                   'thursday'=>'Thursday','friday'=>'Friday','saturday'=>'Saturday','sunday'=>'Sunday'];
+      $day_index = ['sunday'=>0,'monday'=>1,'tuesday'=>2,'wednesday'=>3,'thursday'=>4,'friday'=>5,'saturday'=>6];
+      $st = $pdo->prepare("INSERT INTO availability (business_id,day_name,day_en,day_index,is_open,open_time,close_time) VALUES (?,?,?,?,?,?,?)");
+      foreach ($days as $d) {
+        $open  = !empty($_POST['day_open_'.$d]) ? 1 : 0;
+        $ot    = $open ? ($_POST['open_'.$d]  ?? null) : null;
+        $ct    = $open ? ($_POST['close_'.$d] ?? null) : null;
+        $st->execute([$bid, $fr_names[$d], $en_names[$d], $day_index[$d], $open, $ot, $ct]);
+      }
+      if ($action === 'onboard_availability') { $_SESSION['cl_onboard_step'] = 3; }
+      $success = 'Disponibilités enregistrées.';
+    }
 
-    header('Location: ClientLion.php#profile');
-    exit;
-  }
+    /* ── ONBOARD STEP 3: save services ─────────────────── */
+    if ($action === 'onboard_services' || $action === 'save_services') {
+      $ids = $_POST['svc_id'] ?? [];
+      foreach ($ids as $sid) {
+        $sid = (int)$sid;
+        $nm  = trim($_POST['svc_name_'.$sid]  ?? '');
+        $dur = trim($_POST['svc_dur_'.$sid]   ?? '');
+        $pr  = (int)preg_replace('/\D/','',$_POST['svc_price_'.$sid] ?? '0');
+        $desc= trim($_POST['svc_desc_'.$sid]  ?? '');
+        $col = trim($_POST['svc_color_'.$sid] ?? '#C9A84C');
+        $act = !empty($_POST['svc_active_'.$sid]) ? 1 : 0;
+        $pdo->prepare("UPDATE services SET name=?,duration=?,price=?,description=?,color=?,active=? WHERE id=? AND business_id=?")
+            ->execute([$nm,$dur,$pr,$desc,$col,$act,$sid,$bid]);
+      }
+      if ($action === 'onboard_services') { $_SESSION['cl_onboard_step'] = 4; }
+      $success = 'Services enregistrés.';
+    }
 
-  /* ── DELETE GALLERY PHOTO ───────────────────────────────
-     Called when owner clicks delete on a photo
-  ─────────────────────────────────────────────────────── */
-  if ($_POST['action'] === 'delete_photo' && $logged) {
-    $slug      = $owner['slug'];
-    $del_path  = $_POST['photo_path'] ?? '';
+    /* ── ONBOARD STEP 4: upload gallery ─────────────────── */
+    if ($action === 'onboard_gallery' || $action === 'upload_gallery') {
+      $max    = (int)($data['gal_max_photos'] ?? 9);
+      $count_st = $pdo->prepare("SELECT COUNT(*) FROM gallery WHERE business_id=?");
+      $count_st->execute([$bid]);
+      $current = (int)$count_st->fetchColumn();
+      $files   = $_FILES['gallery_photos'] ?? [];
+      $uploaded = 0;
+      if (!empty($files['tmp_name'])) {
+        $names = is_array($files['tmp_name']) ? $files['tmp_name'] : [$files['tmp_name']];
+        $orignames = is_array($files['name']) ? $files['name'] : [$files['name']];
+        foreach ($names as $i => $tmp) {
+          if ($current + $uploaded >= $max) break;
+          $fake = ['tmp_name'=>$tmp,'name'=>$orignames[$i]];
+          $path = upload_file($fake, $slug, 'gallery', 'gal');
+          if ($path) {
+            $pdo->prepare("INSERT INTO gallery (business_id,path,display_order) VALUES (?,?,?)")
+                ->execute([$bid, $path, $current+$uploaded]);
+            $uploaded++;
+          }
+        }
+      }
+      if ($action === 'onboard_gallery') { $_SESSION['cl_onboard_step'] = 5; }
+      $success = $uploaded . ' photo(s) ajoutée(s).';
+    }
 
-    $biz     = load_business($slug, $data_dir);
-    $gallery = $biz['gallery'] ?? [];
+    /* ── ONBOARD STEP 5: profile + finish ───────────────── */
+    if ($action === 'onboard_profile' || $action === 'save_profile') {
+      $name = trim($_POST['owner_name'] ?? '');
+      /* avatar upload */
+      $avatar_path = null;
+      if (!empty($_FILES['avatar']['tmp_name'])) {
+        $avatar_path = upload_file($_FILES['avatar'], $slug, '', 'avatar');
+        if ($avatar_path) {
+          $pdo->prepare("UPDATE businesses SET avatar_photo=? WHERE id=?")->execute([$avatar_path,$bid]);
+        }
+      }
+      if ($name) $pdo->prepare("UPDATE owners SET name=? WHERE id=?")->execute([$name,$owner_id]);
+      /* cover if given access */
+      if (!empty($_FILES['cover']['tmp_name'])) {
+        $cp = upload_file($_FILES['cover'], $slug, '', 'cover');
+        if ($cp) $pdo->prepare("UPDATE businesses SET cover_photo=? WHERE id=?")->execute([$cp,$bid]);
+      }
+      /* dark mode pref */
+      $dark = !empty($_POST['dark_mode']) ? 1 : 0;
+      $pdo->prepare("UPDATE owners SET dark_mode=? WHERE id=?")->execute([$dark,$owner_id]);
+      if ($action === 'onboard_profile') {
+        unset($_SESSION['cl_onboard'], $_SESSION['cl_onboard_step']);
+        $success = 'Profil complet. Bienvenue sur votre espace !';
+      } else {
+        $success = 'Profil mis à jour.';
+      }
+    }
 
-    /* Remove from array */
-    $gallery = array_filter($gallery, fn($p) => $p['path'] !== $del_path);
-    $gallery = array_values($gallery);
+    /* ── DELETE GALLERY PHOTO ───────────────────────────── */
+    if ($action === 'delete_gallery') {
+      $gid = (int)($_POST['gallery_id'] ?? 0);
+      $st  = $pdo->prepare("SELECT path FROM gallery WHERE id=? AND business_id=?");
+      $st->execute([$gid, $bid]);
+      $row2 = $st->fetch();
+      if ($row2) {
+        $full = dirname(__DIR__) . '/' . $row2['path'];
+        if (file_exists($full)) unlink($full);
+        $pdo->prepare("DELETE FROM gallery WHERE id=?")->execute([$gid]);
+      }
+      $success = 'Photo supprimée.';
+    }
 
-    /* Delete file from disk */
-    $full_path = 'C:/Xampp/htdocs/LionRDV/' . $del_path;
-    if (file_exists($full_path)) unlink($full_path);
+    /* ── CANCEL RESERVATION ─────────────────────────────── */
+    if ($action === 'cancel_reservation') {
+      $rid = (int)($_POST['reservation_id'] ?? 0);
+      $pdo->prepare("UPDATE reservations SET status='cancelled', cancelled_at=NOW() WHERE id=? AND business_id=?")
+          ->execute([$rid, $bid]);
+      $success = 'RDV annulé.';
+    }
 
-    save_business($slug, ['gallery' => $gallery], $data_dir);
-    $_SESSION['flash'] = ['type'=>'success','msg'=>'Photo supprimée.'];
-    header('Location: ClientLion.php#profile');
-    exit;
+    /* ── SAVE THEME ─────────────────────────────────────── */
+    if ($action === 'save_theme') {
+      $dark = !empty($_POST['dark_mode']) ? 1 : 0;
+      $lang = $_POST['lang'] ?? 'fr';
+      $pdo->prepare("UPDATE owners SET dark_mode=?, language_pref=? WHERE id=?")
+          ->execute([$dark, $lang, $owner_id]);
+      $success = 'Préférences enregistrées.';
+    }
   }
 }
 
-/* ── FLASH MESSAGE ──────────────────────────────────────── */
-$flash = $_SESSION['flash'] ?? null;
-unset($_SESSION['flash']);
-
-/* ── LOAD BUSINESS DATA FROM JSON ───────────────────────── */
-$biz_data     = [];
-$biz_gallery  = [];
-$biz_avail    = [];
-
+/* ── reload session data after post ────────────────────── */
 if ($logged) {
-  $biz_data    = load_business($owner['slug'], $data_dir);
-  $biz_gallery = $biz_data['gallery']      ?? [];
-  $biz_avail   = $biz_data['availability'] ?? [];
+  $ownerData = load_owner_biz($pdo, $owner_id);
+  if (!$ownerData) { session_destroy(); header('Location: ClientLion.php'); exit; }
+  $biz_id   = $ownerData['biz_id'];
+  $slug     = $ownerData['slug'];
+  $col      = $ownerData['theme_color'] ?? '#C9A84C';
+  $dark_mode = !empty($ownerData['dark_mode']);
+  $lang_pref = $ownerData['language_pref'] ?? 'fr';
+
+  /* load services */
+  $services = $pdo->prepare("SELECT * FROM services WHERE business_id=? ORDER BY display_order,id");
+  $services->execute([$biz_id]);
+  $services = $services->fetchAll(PDO::FETCH_ASSOC);
+
+  /* load availability */
+  $avail = $pdo->prepare("SELECT * FROM availability WHERE business_id=? ORDER BY day_index");
+  $avail->execute([$biz_id]);
+  $avail = $avail->fetchAll(PDO::FETCH_ASSOC);
+
+  /* load gallery */
+  $gallery = $pdo->prepare("SELECT * FROM gallery WHERE business_id=? ORDER BY display_order,id");
+  $gallery->execute([$biz_id]);
+  $gallery = $gallery->fetchAll(PDO::FETCH_ASSOC);
+
+  /* load reservations (last 30 days + upcoming) */
+  $reservations = $pdo->prepare(
+    "SELECT r.*, GROUP_CONCAT(rs.service_name SEPARATOR ', ') AS services_list
+     FROM reservations r
+     LEFT JOIN reservation_services rs ON rs.reservation_id = r.id
+     WHERE r.business_id=? AND r.rdv_date >= DATE_SUB(CURDATE(), INTERVAL 30 DAY)
+     GROUP BY r.id ORDER BY r.rdv_date DESC, r.rdv_time DESC LIMIT 60"
+  );
+  $reservations->execute([$biz_id]);
+  $reservations = $reservations->fetchAll(PDO::FETCH_ASSOC);
+
+  /* stats */
+  $stats = $pdo->prepare(
+    "SELECT
+       COUNT(*) AS total_month,
+       SUM(CASE WHEN status='confirmed' OR status='completed' THEN 1 ELSE 0 END) AS confirmed,
+       SUM(CASE WHEN status='cancelled' THEN 1 ELSE 0 END) AS cancelled,
+       SUM(CASE WHEN rdv_date >= CURDATE() AND rdv_date < DATE_ADD(CURDATE(),INTERVAL 7 DAY) AND status='confirmed' THEN 1 ELSE 0 END) AS upcoming_week
+     FROM reservations WHERE business_id=? AND rdv_date >= DATE_FORMAT(CURDATE(),'%Y-%m-01')"
+  );
+  $stats->execute([$biz_id]);
+  $stats = $stats->fetch(PDO::FETCH_ASSOC);
+
+  $cancel_rate = $stats['total_month'] > 0 ? round($stats['cancelled'] / $stats['total_month'] * 100) : 0;
+
+  /* revenue estimate */
+  $rev = $pdo->prepare(
+    "SELECT COALESCE(SUM(s.price),0) AS total
+     FROM reservations r
+     JOIN reservation_services rs ON rs.reservation_id=r.id
+     JOIN services s ON s.name=rs.service_name AND s.business_id=r.business_id
+     WHERE r.business_id=? AND r.rdv_date >= DATE_FORMAT(CURDATE(),'%Y-%m-01') AND r.status != 'cancelled'"
+  );
+  $rev->execute([$biz_id]);
+  $revenue = (int)$rev->fetchColumn();
+
+  /* week chart */
+  $week = $pdo->prepare(
+    "SELECT DAYOFWEEK(rdv_date) AS dow, COUNT(*) AS cnt
+     FROM reservations WHERE business_id=? AND rdv_date >= DATE_SUB(CURDATE(), INTERVAL 7 DAY) AND status != 'cancelled'
+     GROUP BY dow"
+  );
+  $week->execute([$biz_id]);
+  $week_map = []; foreach($week->fetchAll(PDO::FETCH_ASSOC) as $r) $week_map[$r['dow']] = $r['cnt'];
 }
-
-/* ── MOCK DATA ──────────────────────────────────────────── */
-$rdv_list = [
-  ['id'=>1,'time'=>'09h30','date'=>'Aujourd\'hui','name'=>'Awa Tchoupo',  'service'=>'Pose ongles',      'duration'=>'1h',    'phone'=>'+237690001111','status'=>'en_cours',  'amount'=>5000],
-  ['id'=>2,'time'=>'11h00','date'=>'Aujourd\'hui','name'=>'Carine Bebe',  'service'=>'Lissage',          'duration'=>'2h',    'phone'=>'+237690002222','status'=>'confirme',  'amount'=>9000],
-  ['id'=>3,'time'=>'14h30','date'=>'Aujourd\'hui','name'=>'Marie Nguele', 'service'=>'Coupe & Brushing', 'duration'=>'45min', 'phone'=>'+237690003333','status'=>'confirme',  'amount'=>2500],
-  ['id'=>4,'time'=>'16h00','date'=>'Aujourd\'hui','name'=>'Sylvie Ateba', 'service'=>'Maquillage',       'duration'=>'1h30',  'phone'=>'+237690004444','status'=>'en_attente','amount'=>7000],
-  ['id'=>5,'time'=>'09h00','date'=>'Demain',       'name'=>'Pauline Biya','service'=>'Coupe',            'duration'=>'45min', 'phone'=>'+237690005555','status'=>'confirme',  'amount'=>2500],
-  ['id'=>6,'time'=>'10h30','date'=>'Demain',       'name'=>'Ruth Fouda',  'service'=>'Pose ongles',      'duration'=>'1h',    'phone'=>'+237690006666','status'=>'confirme',  'amount'=>5000],
-  ['id'=>7,'time'=>'13h00','date'=>'Jeudi 11',     'name'=>'Sandrine Kom','service'=>'Lissage',          'duration'=>'2h',    'phone'=>'+237690007777','status'=>'confirme',  'amount'=>9000],
-  ['id'=>8,'time'=>'15h00','date'=>'Vendredi 12',  'name'=>'Hortense Eto','service'=>'Maquillage',       'duration'=>'1h30',  'phone'=>'+237690008888','status'=>'confirme',  'amount'=>7000],
-];
-
-$services = [
-  ['id'=>1,'name'=>'Coupe & Brushing',  'duration'=>'45 min','price'=>2500, 'color'=>'#D4447A'],
-  ['id'=>2,'name'=>'Lissage brésilien', 'duration'=>'2h',    'price'=>9000, 'color'=>'#E07B39'],
-  ['id'=>3,'name'=>'Pose ongles gel',   'duration'=>'1h',    'price'=>5000, 'color'=>'#7C3AED'],
-  ['id'=>4,'name'=>'Maquillage complet','duration'=>'1h30',  'price'=>7000, 'color'=>'#0EA5E9'],
-  ['id'=>5,'name'=>'Tresses africaines','duration'=>'3h',    'price'=>12000,'color'=>'#059669'],
-];
-
-/* Default availability if no JSON yet */
-$availability = !empty($biz_avail) ? $biz_avail : [
-  ['day'=>'Lundi',    'day_en'=>'Monday',    'open'=>true,  'start'=>'08:00','end'=>'18:00'],
-  ['day'=>'Mardi',    'day_en'=>'Tuesday',   'open'=>true,  'start'=>'08:00','end'=>'18:00'],
-  ['day'=>'Mercredi', 'day_en'=>'Wednesday', 'open'=>true,  'start'=>'08:00','end'=>'18:00'],
-  ['day'=>'Jeudi',    'day_en'=>'Thursday',  'open'=>true,  'start'=>'08:00','end'=>'18:00'],
-  ['day'=>'Vendredi', 'day_en'=>'Friday',    'open'=>true,  'start'=>'08:00','end'=>'19:00'],
-  ['day'=>'Samedi',   'day_en'=>'Saturday',  'open'=>true,  'start'=>'09:00','end'=>'17:00'],
-  ['day'=>'Dimanche', 'day_en'=>'Sunday',    'open'=>false, 'start'=>'',     'end'=>''],
-];
-
-$stats = [
-  'today_rdv'  => 8,
-  'month_rdv'  => 47,
-  'month_fcfa' => 47000,
-  'rating'     => 4.9,
-  'views'      => 142,
-];
 ?>
 <!DOCTYPE html>
-<html lang="fr">
+<html lang="fr" data-theme="<?= $logged && $dark_mode ? 'dark' : 'light' ?>">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>LionRDV — Espace Propriétaire</title>
-  <link rel="stylesheet" href="Client.css">
+  <title><?= $logged ? h($ownerData['biz_name']).' — ' : '' ?>Mon Espace · LionRDV</title>
+  <link rel="stylesheet" href="clientLion.css">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
 </head>
-<body class="<?= $logged ? 'is-dashboard' : 'is-login' ?>">
+<body>
 
-<?php if ($flash): ?>
-<div id="php-flash"
-     data-type="<?= $flash['type'] ?>"
-     data-msg="<?= htmlspecialchars($flash['msg']) ?>"></div>
-<?php endif; ?>
-
+<?php /* ═══════════════════════ LOGIN PAGE ═══════════════════════ */ ?>
 <?php if (!$logged): ?>
-<!-- ═══════════════════════════════════════════
-     LOGIN PAGE
-═══════════════════════════════════════════ -->
-<div class="login-shell">
-
-  <div class="login-left">
-    <div class="ll-content">
-      <div class="ll-logo-block">
-        <img src="liontech-logo.jpg" alt="LIONTECH Logo" class="logo-img">
-        <div class="ll-name">Lion<span>RDV</span></div>
-        <div class="ll-tagline">by LionTech</div>
-      </div>
-      <div class="ll-features">
-        <div class="ll-feat"><div class="ll-feat-icon"><i class="fa-regular fa-calendar-check"></i></div><div class="ll-feat-text">Gérez vos réservations en temps réel</div></div>
-        <div class="ll-feat"><div class="ll-feat-icon"><i class="fa-regular fa-clock"></i></div><div class="ll-feat-text">Définissez vos disponibilités facilement</div></div>
-        <div class="ll-feat"><div class="ll-feat-icon"><i class="fa-solid fa-qrcode"></i></div><div class="ll-feat-text">Partagez votre lien QR avec vos clients</div></div>
-        <div class="ll-feat"><div class="ll-feat-icon"><i class="fa-solid fa-chart-line"></i></div><div class="ll-feat-text">Suivez vos revenus et statistiques</div></div>
-      </div>
-      <div class="ll-footer">© 2026 LionTech — Tous droits réservés</div>
+<div class="cl-login-wrap">
+  <div class="cl-login-box">
+    <div class="cl-login-brand">
+      <span class="cl-login-lion">🦁</span>
+      <span class="cl-login-name">LionRDV</span>
     </div>
-  </div>
-
-  <div class="login-right">
-    <div class="login-form-wrap">
-      <div class="lf-lang-bar">
-        <button class="lf-lb active" onclick="setLang('fr', this)">FR</button>
-        <button class="lf-lb" onclick="setLang('en', this)">EN</button>
-      </div>
-      <div class="lf-header">
-        <h1 class="lf-welcome" data-fr="Bienvenue 👋" data-en="Welcome 👋">Bienvenue 👋</h1>
-        <p class="lf-sub" data-fr="Connectez-vous à votre espace propriétaire" data-en="Sign in to your owner dashboard">Connectez-vous à votre espace propriétaire</p>
-      </div>
-      <?php if ($error): ?>
-        <div class="lf-error"><i class="fa-solid fa-circle-exclamation"></i> <?= htmlspecialchars($error) ?></div>
-      <?php endif; ?>
-      <form class="lf-form" method="POST" action="ClientLion.php">
-        <input type="hidden" name="action" value="login">
-        <div class="lf-field">
-          <label data-fr="Adresse email" data-en="Email address">Adresse email</label>
-          <input type="email" name="email" placeholder="nora@example.com" value="nora@beauty.cm" required autocomplete="email">
+    <h1 class="cl-login-title">Espace propriétaire</h1>
+    <p class="cl-login-sub">Connectez-vous avec votre numéro WhatsApp</p>
+    <?php if ($error): ?>
+    <div class="cl-alert cl-alert-error"><?= h($error) ?></div>
+    <?php endif; ?>
+    <form method="POST" class="cl-login-form">
+      <input type="hidden" name="action" value="login">
+      <div class="cl-form-group">
+        <label class="cl-label">Numéro WhatsApp</label>
+        <div class="cl-prefix-wrap">
+          <span class="cl-prefix">+237</span>
+          <input class="cl-input" type="tel" name="whatsapp" placeholder="6XX XXX XXX" required autofocus>
         </div>
-        <div class="lf-field">
-          <label data-fr="Mot de passe" data-en="Password">Mot de passe</label>
-          <div class="lf-pwd-wrap">
-            <input type="password" name="password" id="lf-pwd" placeholder="••••••••••" value="Lion2026!" required autocomplete="current-password">
-            <button type="button" class="lf-eye" onclick="togglePwd()"><i class="fa-regular fa-eye" id="eye-icon"></i></button>
-          </div>
-        </div>
-        <div class="lf-row">
-          <label class="lf-remember">
-            <input type="checkbox" name="remember">
-            <span data-fr="Se souvenir de moi" data-en="Remember me">Se souvenir de moi</span>
-          </label>
-          <button type="button" class="lf-forgot" data-fr="Mot de passe oublié ?" data-en="Forgot password?">Mot de passe oublié ?</button>
-        </div>
-        <button type="submit" class="lf-submit">
-          <span class="lf-submit-dot"></span>
-          <span data-fr="Se connecter" data-en="Sign in">Se connecter</span>
-        </button>
-      </form>
-      <div class="lf-divider"><span data-fr="besoin d'aide ?" data-en="need help?">besoin d'aide ?</span></div>
-      <div class="lf-help">
-        <span data-fr="Contactez LionTech sur" data-en="Contact LionTech on">Contactez LionTech sur</span>
-        <a href="https://wa.me/237690000000" target="_blank">WhatsApp</a>
-        <span data-fr="ou par" data-en="or by">ou par</span>
-        <a href="mailto:support@liontech.cm">email</a>
       </div>
-      <div class="lf-powered">
-        <div class="lf-powered-mark">LT</div>
-        <span>Propulsé par <strong>LionTech</strong> · LionRDV Platform</span>
+      <div class="cl-form-group">
+        <label class="cl-label">Mot de passe</label>
+        <input class="cl-input" type="password" name="password" placeholder="Votre mot de passe" required>
       </div>
-    </div>
+      <button type="submit" class="cl-btn-primary cl-btn-full">Se connecter</button>
+    </form>
+    <div class="cl-login-footer">Propulsé par <strong>LionTech</strong> · LionRDV</div>
   </div>
 </div>
 
-<?php else: ?>
-<!-- ═══════════════════════════════════════════
-     OWNER DASHBOARD
-═══════════════════════════════════════════ -->
-<div class="dash-shell">
-
-  <!-- SIDEBAR -->
-  <aside class="dash-sidebar">
-    <div class="ds-brand">
-      <div class="ds-biz-row">
-        <div class="ds-biz-logo" style="background:<?= htmlspecialchars($owner['theme_color']) ?>;">
-          <?= htmlspecialchars($owner['initials']) ?>
-        </div>
-        <div class="ds-biz-info">
-          <div class="ds-biz-name"><?= htmlspecialchars($owner['name']) ?></div>
-          <div class="ds-biz-type"><?= htmlspecialchars($owner['type']) ?></div>
-        </div>
+<?php /* ═══════════════════════ ONBOARDING ═══════════════════════ */
+elseif ($must_onboard): ?>
+<div class="cl-onboard-wrap">
+  <div class="cl-onboard-box">
+    <!-- Steps indicator -->
+    <div class="cl-onboard-steps">
+      <?php for ($s = 1; $s <= 5; $s++): ?>
+      <div class="cl-ob-step <?= $s < $onboard_step ? 'done' : ($s == $onboard_step ? 'active' : '') ?>">
+        <div class="cl-ob-dot"><?= $s < $onboard_step ? '✓' : $s ?></div>
+        <div class="cl-ob-lbl"><?= ['','Mot de passe','Disponibilités','Services','Galerie','Profil'][$s] ?></div>
       </div>
-      <div class="ds-powered">
-        <div class="ds-powered-mark">LT</div>
-        <span>Propulsé par <strong>LionRDV</strong></span>
-      </div>
+      <?php if ($s < 5): ?><div class="cl-ob-line <?= $s < $onboard_step ? 'done' : '' ?>"></div><?php endif; ?>
+      <?php endfor; ?>
     </div>
-    <nav class="ds-nav">
-      <div class="ds-nav-lbl" data-fr="Principal" data-en="Main">Principal</div>
-      <a class="ds-nav-item active" data-page="dashboard" onclick="showPage('dashboard',this)">
-        <i class="fa-solid fa-table-cells-large"></i>
-        <span data-fr="Dashboard" data-en="Dashboard">Dashboard</span>
-      </a>
-      <a class="ds-nav-item" data-page="rdv" onclick="showPage('rdv',this)">
-        <i class="fa-regular fa-calendar-check"></i>
-        <span data-fr="Mes RDV" data-en="My bookings">Mes RDV</span>
-        <span class="ds-badge" style="background:<?= htmlspecialchars($owner['theme_color']) ?>;"><?= count($rdv_list) ?></span>
-      </a>
-      <a class="ds-nav-item" data-page="avail" onclick="showPage('avail',this)">
-        <i class="fa-regular fa-clock"></i>
-        <span data-fr="Disponibilités" data-en="Availability">Disponibilités</span>
-      </a>
-      <a class="ds-nav-item" data-page="services" onclick="showPage('services',this)">
-        <i class="fa-solid fa-list-ul"></i>
-        <span data-fr="Mes services" data-en="My services">Mes services</span>
-      </a>
-      <a class="ds-nav-item" data-page="qr" onclick="showPage('qr',this)">
-        <i class="fa-solid fa-qrcode"></i>
-        <span data-fr="QR Code / Mon lien" data-en="QR Code / My link">QR Code / Mon lien</span>
-      </a>
-      <a class="ds-nav-item" data-page="profile" onclick="showPage('profile',this)">
-        <i class="fa-regular fa-user"></i>
-        <span data-fr="Mon profil" data-en="My profile">Mon profil</span>
-      </a>
-    </nav>
-    <div class="ds-footer">
-      <div class="ds-footer-av" style="background:<?= htmlspecialchars($owner['theme_color']) ?>;">
-        <?= htmlspecialchars($owner['initials']) ?>
-      </div>
-      <div class="ds-footer-info">
-        <div class="ds-footer-name"><?= htmlspecialchars($owner['name']) ?></div>
-        <div class="ds-footer-role" data-fr="Propriétaire" data-en="Owner">Propriétaire</div>
-      </div>
-      <form method="POST" style="margin-left:auto;">
-        <input type="hidden" name="action" value="logout">
-        <button type="submit" class="ds-logout" title="Se déconnecter">
-          <i class="fa-solid fa-arrow-right-from-bracket"></i>
-        </button>
+
+    <?php if ($error): ?><div class="cl-alert cl-alert-error"><?= h($error) ?></div><?php endif; ?>
+    <?php if ($success): ?><div class="cl-alert cl-alert-success"><?= h($success) ?></div><?php endif; ?>
+
+    <?php /* STEP 1: PASSWORD */ if ($onboard_step === 1): ?>
+    <div class="cl-ob-content">
+      <div class="cl-ob-icon">🔐</div>
+      <h2 class="cl-ob-title">Créez votre mot de passe</h2>
+      <p class="cl-ob-sub">Vous utilisez un mot de passe temporaire. Choisissez un mot de passe sécurisé pour protéger votre compte.</p>
+      <form method="POST" class="cl-ob-form">
+        <input type="hidden" name="action" value="onboard_password">
+        <div class="cl-form-group">
+          <label class="cl-label">Nouveau mot de passe (min. 8 caractères)</label>
+          <input class="cl-input" type="password" name="new_password" id="new-pwd" placeholder="Nouveau mot de passe" required oninput="checkPwdStrength(this.value)">
+          <div class="cl-pwd-bar"><div class="cl-pwd-fill" id="pwd-fill"></div></div>
+          <div class="cl-pwd-hint" id="pwd-hint">Entrez votre mot de passe</div>
+        </div>
+        <div class="cl-form-group">
+          <label class="cl-label">Confirmer le mot de passe</label>
+          <input class="cl-input" type="password" name="confirm_password" placeholder="Confirmer" required>
+        </div>
+        <button type="submit" class="cl-btn-primary cl-btn-full">Suivant →</button>
       </form>
     </div>
+
+    <?php /* STEP 2: AVAILABILITY */ elseif ($onboard_step === 2): ?>
+    <div class="cl-ob-content">
+      <div class="cl-ob-icon">📅</div>
+      <h2 class="cl-ob-title">Vos disponibilités</h2>
+      <p class="cl-ob-sub">Définissez vos jours et horaires d'ouverture. Vous pourrez les modifier à tout moment.</p>
+      <form method="POST" class="cl-ob-form">
+        <input type="hidden" name="action" value="onboard_availability">
+        <?php
+        $default_days = [
+          ['monday','Lundi',true,'08:00','18:00'],['tuesday','Mardi',true,'08:00','18:00'],
+          ['wednesday','Mercredi',true,'08:00','18:00'],['thursday','Jeudi',true,'08:00','18:00'],
+          ['friday','Vendredi',true,'08:00','19:00'],['saturday','Samedi',true,'09:00','17:00'],
+          ['sunday','Dimanche',false,'',''],
+        ];
+        foreach ($default_days as [$ek,$fr,$open,$ot,$ct]):
+        ?>
+        <div class="cl-day-row" id="row-<?= $ek ?>">
+          <label class="cl-day-tog">
+            <input type="checkbox" name="day_open_<?= $ek ?>" <?= $open?'checked':'' ?> onchange="togDay('<?= $ek ?>',this.checked)">
+            <span class="cl-day-knob"></span>
+          </label>
+          <span class="cl-day-nm <?= !$open?'cl-day-off':'' ?>" id="dnm-<?= $ek ?>"><?= $fr ?></span>
+          <div class="cl-day-times" id="dtimes-<?= $ek ?>" <?= !$open?'style="display:none"':'' ?>>
+            <input class="cl-time-inp" type="time" name="open_<?= $ek ?>" value="<?= $ot ?>">
+            <span class="cl-day-sep">–</span>
+            <input class="cl-time-inp" type="time" name="close_<?= $ek ?>" value="<?= $ct ?>">
+          </div>
+          <?php if (!$open): ?><span class="cl-day-closed" id="dclosed-<?= $ek ?>">Fermé</span><?php endif; ?>
+        </div>
+        <?php endforeach; ?>
+        <button type="submit" class="cl-btn-primary cl-btn-full">Suivant →</button>
+      </form>
+    </div>
+
+    <?php /* STEP 3: SERVICES */ elseif ($onboard_step === 3): ?>
+    <div class="cl-ob-content">
+      <div class="cl-ob-icon">⭐</div>
+      <h2 class="cl-ob-title">Vos services</h2>
+      <p class="cl-ob-sub">Ces services ont été créés selon votre type de commerce. Modifiez les noms, prix et durées.</p>
+      <form method="POST" class="cl-ob-form">
+        <input type="hidden" name="action" value="onboard_services">
+        <?php foreach ($services as $svc): ?>
+        <div class="cl-svc-card">
+          <input type="hidden" name="svc_id[]" value="<?= $svc['id'] ?>">
+          <div class="cl-svc-color-row">
+            <input type="color" class="cl-clr-sw" name="svc_color_<?= $svc['id'] ?>" value="<?= h($svc['color']) ?>">
+            <input class="cl-input" type="text" name="svc_name_<?= $svc['id'] ?>" value="<?= h($svc['name']) ?>" placeholder="Nom du service">
+            <label class="cl-svc-tog">
+              <input type="checkbox" name="svc_active_<?= $svc['id'] ?>" <?= $svc['active']?'checked':'' ?>>
+              <span class="cl-svc-knob"></span>
+            </label>
+          </div>
+          <div class="cl-svc-row2">
+            <div class="cl-form-group">
+              <label class="cl-label">Durée</label>
+              <input class="cl-input" type="text" name="svc_dur_<?= $svc['id'] ?>" value="<?= h($svc['duration']) ?>" placeholder="ex: 45 min">
+            </div>
+            <div class="cl-form-group">
+              <label class="cl-label">Prix (FCFA)</label>
+              <input class="cl-input" type="number" name="svc_price_<?= $svc['id'] ?>" value="<?= h($svc['price']) ?>" placeholder="2500">
+            </div>
+          </div>
+          <div class="cl-form-group">
+            <label class="cl-label">Description courte</label>
+            <input class="cl-input" type="text" name="svc_desc_<?= $svc['id'] ?>" value="<?= h($svc['description'] ?? '') ?>" placeholder="Description visible par les clients">
+          </div>
+        </div>
+        <?php endforeach; ?>
+        <button type="submit" class="cl-btn-primary cl-btn-full">Suivant →</button>
+      </form>
+    </div>
+
+    <?php /* STEP 4: GALLERY */ elseif ($onboard_step === 4): ?>
+    <div class="cl-ob-content">
+      <div class="cl-ob-icon">📸</div>
+      <h2 class="cl-ob-title">Votre galerie photos</h2>
+      <p class="cl-ob-sub">Ajoutez des photos de votre commerce. Maximum <?= (int)($ownerData['gal_max_photos'] ?? 9) ?> photos.</p>
+      <form method="POST" enctype="multipart/form-data" class="cl-ob-form">
+        <input type="hidden" name="action" value="onboard_gallery">
+        <div class="cl-gallery-upload-zone" onclick="document.getElementById('gal-inp').click()">
+          <svg style="width:2rem;height:2rem;stroke:var(--brand);fill:none;stroke-width:1.5;stroke-linecap:round;" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="3"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/></svg>
+          <div class="cl-guz-title">Cliquez ou glissez vos photos ici</div>
+          <div class="cl-guz-sub">JPG, PNG, WEBP · Plusieurs fichiers acceptés</div>
+          <input type="file" id="gal-inp" name="gallery_photos[]" accept="image/*" multiple style="display:none" onchange="previewGallery(this)">
+        </div>
+        <div class="cl-gal-preview-grid" id="gal-preview-grid"></div>
+        <button type="submit" class="cl-btn-primary cl-btn-full" style="margin-top:1rem;">Suivant →</button>
+      </form>
+      <button type="button" class="cl-btn-secondary cl-btn-full" onclick="skipStep()">Passer cette étape →</button>
+    </div>
+
+    <?php /* STEP 5: PROFILE */ else: ?>
+    <div class="cl-ob-content">
+      <div class="cl-ob-icon">👤</div>
+      <h2 class="cl-ob-title">Votre profil</h2>
+      <p class="cl-ob-sub">Ajoutez votre photo de profil et personnalisez votre espace.</p>
+      <form method="POST" enctype="multipart/form-data" class="cl-ob-form">
+        <input type="hidden" name="action" value="onboard_profile">
+        <div class="cl-avatar-upload" onclick="document.getElementById('av-inp').click()">
+          <div class="cl-avatar-circle" id="av-circle">
+            <span id="av-initials"><?= h($ownerData['initials']) ?></span>
+            <img id="av-img" src="" alt="" style="display:none;">
+          </div>
+          <div class="cl-avatar-hint">Cliquez pour ajouter votre photo de profil</div>
+          <input type="file" id="av-inp" name="avatar" accept="image/*" style="display:none" onchange="previewAvatar(this)">
+        </div>
+        <div class="cl-form-group">
+          <label class="cl-label">Nom affiché</label>
+          <input class="cl-input" type="text" name="owner_name" value="<?= h($ownerData['biz_name']) ?>" placeholder="Votre nom ou nom du commerce">
+        </div>
+        <div class="cl-form-group">
+          <label class="cl-label">Langue du dashboard</label>
+          <select class="cl-select" name="language_pref">
+            <option value="fr">Français</option>
+            <option value="en">English</option>
+          </select>
+        </div>
+        <div class="cl-toggle-row">
+          <span class="cl-toggle-lbl">Thème sombre</span>
+          <label class="cl-toggle"><input type="checkbox" name="dark_mode"><span class="cl-toggle-knob"></span></label>
+        </div>
+        <button type="submit" class="cl-btn-primary cl-btn-full" style="margin-top:1rem;">Terminer la configuration ✓</button>
+      </form>
+    </div>
+    <?php endif; ?>
+  </div>
+</div>
+
+<?php /* ═══════════════════════ DASHBOARD ═══════════════════════ */
+else:
+$col = $ownerData['theme_color'] ?? '#C9A84C';
+// derive rgb for rgba usage
+$cr = hexdec(substr($col,1,2)); $cg = hexdec(substr($col,3,2)); $cb = hexdec(substr($col,5,2));
+?>
+<div class="cl-app" id="cl-app">
+
+  <!-- ── SIDEBAR ─────────────────────────────────────────── -->
+  <aside class="cl-sidebar" id="cl-sidebar">
+    <div class="cl-sb-brand">
+      <div class="cl-sb-avatar" style="background:<?= h($col) ?>;"><?= h($ownerData['initials']) ?></div>
+      <div class="cl-sb-info">
+        <div class="cl-sb-name"><?= h($ownerData['biz_name']) ?></div>
+        <div class="cl-sb-plan"><?= h(ucfirst($ownerData['plan'])) ?></div>
+      </div>
+    </div>
+
+    <nav class="cl-nav">
+      <div class="cl-nav-section" data-fr="Principal" data-en="Main">Principal</div>
+      <a class="cl-nav-item active" href="#" onclick="goPage('dashboard',this)" data-fr="Dashboard" data-en="Dashboard">
+        <svg class="cl-nav-ico" viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>
+        <span>Dashboard</span>
+      </a>
+      <a class="cl-nav-item" href="#" onclick="goPage('rdv',this)" data-fr="Mes RDV" data-en="My Bookings">
+        <svg class="cl-nav-ico" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg>
+        <span data-fr="Mes RDV" data-en="My Bookings">Mes RDV</span>
+        <?php $upcoming_count = count(array_filter($reservations,fn($r)=>$r['rdv_date']>=date('Y-m-d')&&$r['status']==='confirmed'));
+        if ($upcoming_count): ?><span class="cl-nav-badge"><?= $upcoming_count ?></span><?php endif; ?>
+      </a>
+      <a class="cl-nav-item" href="#" onclick="goPage('upcoming',this)" data-fr="À venir" data-en="Upcoming">
+        <svg class="cl-nav-ico" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 3"/></svg>
+        <span data-fr="À venir" data-en="Upcoming">À venir</span>
+      </a>
+      <a class="cl-nav-item" href="#" onclick="goPage('whatsapp',this)" data-fr="Messages WA" data-en="WA Messages">
+        <svg class="cl-nav-ico" viewBox="0 0 24 24"><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/></svg>
+        <span data-fr="Messages WA" data-en="WA Messages">Messages WA</span>
+      </a>
+      <div class="cl-nav-sep"></div>
+      <div class="cl-nav-section" data-fr="Gestion" data-en="Management">Gestion</div>
+      <a class="cl-nav-item" href="#" onclick="goPage('hours',this)" data-fr="Disponibilités" data-en="Availability">
+        <svg class="cl-nav-ico" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 3"/></svg>
+        <span data-fr="Disponibilités" data-en="Availability">Disponibilités</span>
+      </a>
+      <a class="cl-nav-item" href="#" onclick="goPage('services',this)" data-fr="Mes services" data-en="My services">
+        <svg class="cl-nav-ico" viewBox="0 0 24 24"><path d="M12 2l3 6 7 1-5 5 1 7-6-3-6 3 1-7-5-5 7-1z"/></svg>
+        <span data-fr="Mes services" data-en="My services">Mes services</span>
+      </a>
+      <a class="cl-nav-item" href="#" onclick="goPage('gallery',this)" data-fr="Galerie" data-en="Gallery">
+        <svg class="cl-nav-ico" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="3"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/></svg>
+        <span data-fr="Galerie" data-en="Gallery">Galerie</span>
+      </a>
+      <div class="cl-nav-sep"></div>
+      <div class="cl-nav-section" data-fr="Compte" data-en="Account">Compte</div>
+      <a class="cl-nav-item" href="#" onclick="goPage('profile',this)" data-fr="Mon profil" data-en="My Profile">
+        <svg class="cl-nav-ico" viewBox="0 0 24 24"><circle cx="12" cy="8" r="4"/><path d="M4 20c0-4 3.6-7 8-7s8 3 8 7"/></svg>
+        <span data-fr="Mon profil" data-en="My Profile">Mon profil</span>
+      </a>
+      <form method="POST" style="margin-top:auto;">
+        <input type="hidden" name="action" value="logout">
+        <button type="submit" class="cl-nav-item cl-nav-logout">
+          <svg class="cl-nav-ico" viewBox="0 0 24 24"><path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4M16 17l5-5-5-5M21 12H9"/></svg>
+          <span data-fr="Déconnexion" data-en="Logout">Déconnexion</span>
+        </button>
+      </form>
+    </nav>
   </aside>
 
-  <!-- MAIN -->
-  <main class="dash-main">
-    <header class="dash-topbar">
-      <div class="dt-left">
-        <div class="dt-title" id="page-title" data-fr="Dashboard" data-en="Dashboard">Dashboard</div>
-        <div class="dt-sub" id="page-sub">
-          <?= date('l j F Y') ?> · <span data-fr="Bonne journée" data-en="Good day">Bonne journée</span>, <?= htmlspecialchars(explode(' ', $owner['name'])[0]) ?> 👋
-        </div>
-      </div>
-      <div class="dt-right">
-        <button class="lang-btn active" onclick="setLang('fr',this)">FR</button>
-        <button class="lang-btn" onclick="setLang('en',this)">EN</button>
-        <div class="dt-notif">
-          <i class="fa-regular fa-bell"></i>
-          <span class="dt-notif-dot"></span>
-        </div>
-      </div>
-    </header>
+  <!-- ── TOPBAR MOBILE ────────────────────────────────────── -->
+  <header class="cl-topbar">
+    <button class="cl-menu-btn" onclick="toggleSidebar()">
+      <svg style="width:1.25rem;height:1.25rem;stroke:var(--cl-text);fill:none;stroke-width:2;stroke-linecap:round;" viewBox="0 0 24 24"><path d="M3 12h18M3 6h18M3 18h18"/></svg>
+    </button>
+    <div class="cl-topbar-title" id="cl-page-title">Dashboard</div>
+    <div class="cl-topbar-r">
+      <button class="cl-lang-btn <?= $lang_pref==='fr'?'on':'' ?>" onclick="setLang('fr',this)">FR</button>
+      <button class="cl-lang-btn <?= $lang_pref==='en'?'on':'' ?>" onclick="setLang('en',this)">EN</button>
+      <a href="/LionRDV/Utilisateur%20du%20client/Utulisateur.php?slug=<?= urlencode($slug) ?>" target="_blank" class="cl-view-page-btn" title="Voir ma page publique">
+        <svg style="width:1rem;height:1rem;stroke:currentColor;fill:none;stroke-width:2;stroke-linecap:round;" viewBox="0 0 24 24"><path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6M15 3h6v6M10 14L21 3"/></svg>
+      </a>
+    </div>
+  </header>
 
-    <!-- ══ DASHBOARD ══ -->
-    <div class="page active" id="page-dashboard">
-      <div class="page-content">
-        <div class="kpi-row">
-          <div class="kpi-card">
-            <div class="kpi-top">
-              <div class="kpi-icon" style="background:<?= htmlspecialchars($owner['theme_bg']) ?>;"><i class="fa-regular fa-calendar-check" style="color:<?= htmlspecialchars($owner['theme_color']) ?>;"></i></div>
-              <div class="kpi-change up">+3</div>
-            </div>
-            <div class="kpi-value" style="color:<?= htmlspecialchars($owner['theme_color']) ?>;"><?= $stats['today_rdv'] ?></div>
-            <div class="kpi-label" data-fr="Aujourd'hui" data-en="Today">Aujourd'hui</div>
-          </div>
-          <div class="kpi-card">
-            <div class="kpi-top">
-              <div class="kpi-icon" style="background:#FAFAF8;border:1px solid var(--border);"><i class="fa-regular fa-calendar" style="color:var(--black);"></i></div>
-              <div class="kpi-change up" data-fr="Ce mois" data-en="This month">Ce mois</div>
-            </div>
-            <div class="kpi-value"><?= $stats['month_rdv'] ?></div>
-            <div class="kpi-label" data-fr="Total RDV" data-en="Total bookings">Total RDV</div>
-          </div>
-          <div class="kpi-card">
-            <div class="kpi-top">
-              <div class="kpi-icon" style="background:var(--gold-light);"><i class="fa-solid fa-chart-line" style="color:#78560A;"></i></div>
-              <div class="kpi-change up">+22%</div>
-            </div>
-            <div class="kpi-value"><?= number_format($stats['month_fcfa']) ?></div>
-            <div class="kpi-label" data-fr="FCFA ce mois" data-en="FCFA this month">FCFA ce mois</div>
-          </div>
-          <div class="kpi-card">
-            <div class="kpi-top">
-              <div class="kpi-icon" style="background:#ECFDF5;"><i class="fa-solid fa-star" style="color:#059669;"></i></div>
-              <div class="kpi-change up">+0.2</div>
-            </div>
-            <div class="kpi-value"><?= $stats['rating'] ?></div>
-            <div class="kpi-label" data-fr="Note moyenne" data-en="Avg. rating">Note moyenne</div>
+  <!-- ── MAIN CONTENT ─────────────────────────────────────── -->
+  <main class="cl-main" id="cl-main">
+    <!-- Style brand CSS variable for this business -->
+    <style>:root{--brand:<?= h($col) ?>;--brand-rgb:<?= $cr ?>,<?= $cg ?>,<?= $cb ?>;}</style>
+
+    <?php if ($success): ?><div class="cl-alert cl-alert-success cl-alert-floating"><?= h($success) ?></div><?php endif; ?>
+
+    <!-- ══════════ PAGE: DASHBOARD ══════════ -->
+    <div class="cl-page" id="page-dashboard">
+      <div class="cl-page-header">
+        <h1 class="cl-page-title" data-fr="Tableau de bord" data-en="Dashboard">Tableau de bord</h1>
+        <p class="cl-page-sub">Bonjour <?= h($ownerData['biz_name']) ?> · <?= date('d F Y') ?></p>
+      </div>
+
+      <!-- Metric cards -->
+      <div class="cl-metrics">
+        <div class="cl-metric">
+          <div class="cl-metric-lbl" data-fr="RDV ce mois" data-en="Bookings this month">RDV ce mois</div>
+          <div class="cl-metric-val"><?= (int)$stats['total_month'] ?></div>
+          <div class="cl-metric-sub cl-metric-up">↑ <?= (int)$stats['confirmed'] ?> confirmés</div>
+        </div>
+        <div class="cl-metric">
+          <div class="cl-metric-lbl" data-fr="Revenus (FCFA)" data-en="Revenue (FCFA)">Revenus (FCFA)</div>
+          <div class="cl-metric-val"><?= number_format($revenue,0,',',' ') ?></div>
+          <div class="cl-metric-sub">Ce mois</div>
+        </div>
+        <div class="cl-metric">
+          <div class="cl-metric-lbl" data-fr="Taux annulation" data-en="Cancellation rate">Taux annulation</div>
+          <div class="cl-metric-val"><?= $cancel_rate ?>%</div>
+          <div class="cl-metric-sub <?= $cancel_rate < 10 ? 'cl-metric-up' : 'cl-metric-dn' ?>">
+            <?= $cancel_rate < 10 ? '↓ Bon taux' : '↑ Élevé' ?>
           </div>
         </div>
-        <div class="two-col">
-          <div class="content-card">
-            <div class="card-head">
-              <div class="card-title">
-                <i class="fa-regular fa-calendar-check"></i>
-                <span data-fr="RDV du jour" data-en="Today's bookings">RDV du jour</span>
-                <span class="card-badge" style="background:<?= htmlspecialchars($owner['theme_bg']) ?>;color:<?= htmlspecialchars($owner['theme_color']) ?>;"><?= $stats['today_rdv'] ?></span>
-              </div>
-              <button class="card-action" onclick="showPage('rdv',document.querySelector('[data-page=rdv]'))" data-fr="Voir tout →" data-en="See all →">Voir tout →</button>
-            </div>
+        <div class="cl-metric">
+          <div class="cl-metric-lbl" data-fr="Cette semaine" data-en="This week">Cette semaine</div>
+          <div class="cl-metric-val"><?= (int)$stats['upcoming_week'] ?></div>
+          <div class="cl-metric-sub">RDV à venir</div>
+        </div>
+      </div>
+
+      <div class="cl-dash-grid">
+        <!-- Week chart -->
+        <div class="cl-card">
+          <div class="cl-card-head">
+            <div class="cl-card-title" data-fr="RDV par jour (7 jours)" data-en="Bookings by day">RDV par jour (7 jours)</div>
+          </div>
+          <div class="cl-mini-chart">
             <?php
-            $status_map = [
-              'en_cours'   => ['class'=>'st-now',  'fr'=>'En cours',   'en'=>'In progress'],
-              'confirme'   => ['class'=>'st-ok',   'fr'=>'Confirmé',   'en'=>'Confirmed'],
-              'en_attente' => ['class'=>'st-pend', 'fr'=>'En attente', 'en'=>'Pending'],
-            ];
-            foreach (array_slice($rdv_list, 0, 4) as $rdv):
-              $st = $status_map[$rdv['status']] ?? $status_map['confirme'];
+            $days_chart = [2=>'Lun',3=>'Mar',4=>'Mer',5=>'Jeu',6=>'Ven',7=>'Sam',1=>'Dim'];
+            $max_cnt = max(array_values($week_map) ?: [1]);
+            foreach ($days_chart as $dow => $lbl):
+              $cnt = $week_map[$dow] ?? 0;
+              $h_pct = $max_cnt > 0 ? round($cnt / $max_cnt * 70) : 4;
             ?>
-            <div class="rdv-row">
-              <div class="rdv-time-block">
-                <div class="rdv-time"><?= htmlspecialchars($rdv['time']) ?></div>
-                <div class="rdv-date-lbl"><?= htmlspecialchars($rdv['date']) ?></div>
-              </div>
-              <div class="rdv-bar" style="background:<?= htmlspecialchars($owner['theme_color']) ?>;"></div>
-              <div class="rdv-info">
-                <div class="rdv-name"><?= htmlspecialchars($rdv['name']) ?></div>
-                <div class="rdv-svc"><?= htmlspecialchars($rdv['service']) ?> · <?= htmlspecialchars($rdv['duration']) ?></div>
-              </div>
-              <div class="rdv-status <?= $st['class'] ?>" data-fr="<?= $st['fr'] ?>" data-en="<?= $st['en'] ?>"><?= $st['fr'] ?></div>
-              <div class="rdv-actions">
-                <a href="https://wa.me/<?= preg_replace('/\D/','',$rdv['phone']) ?>?text=Bonjour+<?= urlencode($rdv['name']) ?>+votre+RDV+est+confirmé" target="_blank" class="rdv-btn wa" title="WhatsApp"><i class="fa-brands fa-whatsapp"></i></a>
-                <a href="tel:<?= htmlspecialchars($rdv['phone']) ?>" class="rdv-btn call" title="Appeler"><i class="fa-solid fa-phone"></i></a>
-                <button class="rdv-btn cancel" onclick="cancelRdv(<?= $rdv['id'] ?>, '<?= htmlspecialchars($rdv['name']) ?>')" title="Annuler"><i class="fa-solid fa-xmark"></i></button>
-              </div>
+            <div class="cl-bar-wrap">
+              <div class="cl-bar" style="height:<?= max(4,$h_pct) ?>px;" title="<?= $cnt ?> RDV"></div>
+              <div class="cl-bar-lbl"><?= $lbl ?></div>
             </div>
             <?php endforeach; ?>
           </div>
-          <div style="display:flex;flex-direction:column;gap:12px;">
-            <div class="content-card">
-              <div class="card-head"><div class="card-title"><i class="fa-solid fa-chart-pie"></i> <span data-fr="Statistiques" data-en="Statistics">Statistiques</span></div></div>
-              <div class="mini-stats">
-                <div class="ms-item"><div><div class="ms-label" data-fr="RDV ce mois" data-en="Bookings this month">RDV ce mois</div><div class="ms-bar-wrap"><div class="ms-bar" style="width:78%;background:<?= htmlspecialchars($owner['theme_color']) ?>;"></div></div></div><div class="ms-value"><?= $stats['month_rdv'] ?></div></div>
-                <div class="ms-item"><div><div class="ms-label" data-fr="Vues du profil" data-en="Profile views">Vues du profil</div><div class="ms-bar-wrap"><div class="ms-bar" style="width:60%;background:var(--gold);"></div></div></div><div class="ms-value"><?= $stats['views'] ?></div></div>
-                <div class="ms-item"><div><div class="ms-label" data-fr="Taux de confirmation" data-en="Confirmation rate">Taux de confirmation</div><div class="ms-bar-wrap"><div class="ms-bar" style="width:92%;background:#059669;"></div></div></div><div class="ms-value">92%</div></div>
-              </div>
-            </div>
-            <div class="content-card">
-              <div class="card-head"><div class="card-title"><i class="fa-regular fa-calendar"></i> <span data-fr="Demain" data-en="Tomorrow">Demain</span></div></div>
-              <?php foreach (array_filter($rdv_list, fn($r) => $r['date'] === 'Demain') as $rdv): ?>
-              <div class="today-row">
-                <div class="today-dot" style="background:<?= htmlspecialchars($owner['theme_color']) ?>;"></div>
-                <div class="today-name"><?= htmlspecialchars($rdv['name']) ?></div>
-                <div class="today-svc"><?= htmlspecialchars($rdv['service']) ?></div>
-                <div class="today-time"><?= htmlspecialchars($rdv['time']) ?></div>
-              </div>
-              <?php endforeach; ?>
-            </div>
-          </div>
         </div>
-      </div>
-    </div>
 
-    <!-- ══ MES RDV ══ -->
-    <div class="page" id="page-rdv">
-      <div class="page-content">
-        <div class="content-card">
-          <div class="card-head">
-            <div class="card-title">
-              <i class="fa-regular fa-calendar-check"></i>
-              <span data-fr="Toutes mes réservations" data-en="All my bookings">Toutes mes réservations</span>
-              <span class="card-badge" style="background:<?= htmlspecialchars($owner['theme_bg']) ?>;color:<?= htmlspecialchars($owner['theme_color']) ?>;"><?= count($rdv_list) ?></span>
-            </div>
-            <div class="rdv-filter-tabs">
-              <button class="filter-tab active" data-fr="Tout" data-en="All">Tout</button>
-              <button class="filter-tab" data-fr="Aujourd'hui" data-en="Today">Aujourd'hui</button>
-              <button class="filter-tab" data-fr="Demain" data-en="Tomorrow">Demain</button>
-              <button class="filter-tab" data-fr="À venir" data-en="Upcoming">À venir</button>
-            </div>
+        <!-- Upcoming -->
+        <div class="cl-card">
+          <div class="cl-card-head">
+            <div class="cl-card-title" data-fr="Prochains RDV" data-en="Upcoming">Prochains RDV</div>
+            <button class="cl-card-action" onclick="goPage('upcoming',null)">Voir tout</button>
           </div>
-          <?php foreach ($rdv_list as $rdv):
-            $st = $status_map[$rdv['status']] ?? $status_map['confirme'];
-          ?>
-          <div class="rdv-row">
-            <div class="rdv-time-block">
-              <div class="rdv-time"><?= htmlspecialchars($rdv['time']) ?></div>
-              <div class="rdv-date-lbl"><?= htmlspecialchars($rdv['date']) ?></div>
+          <?php
+          $ups = array_filter($reservations, fn($r) => $r['rdv_date'] >= date('Y-m-d') && $r['status']==='confirmed');
+          $ups = array_slice($ups, 0, 4);
+          foreach ($ups as $r): ?>
+          <div class="cl-upcoming-item">
+            <div class="cl-up-dot" style="background:var(--brand);"></div>
+            <div class="cl-up-info">
+              <div class="cl-up-nm"><?= h($r['prenom'].' '.$r['nom']) ?></div>
+              <div class="cl-up-svc"><?= h($r['services_list'] ?? '') ?></div>
             </div>
-            <div class="rdv-bar" style="background:<?= htmlspecialchars($owner['theme_color']) ?>;"></div>
-            <div class="rdv-info">
-              <div class="rdv-name"><?= htmlspecialchars($rdv['name']) ?></div>
-              <div class="rdv-svc"><?= htmlspecialchars($rdv['service']) ?> · <?= htmlspecialchars($rdv['duration']) ?></div>
-              <div class="rdv-phone"><i class="fa-solid fa-phone" style="font-size:9px;"></i> <?= htmlspecialchars($rdv['phone']) ?></div>
-            </div>
-            <div class="rdv-amount"><?= number_format($rdv['amount']) ?> F</div>
-            <div class="rdv-status <?= $st['class'] ?>" data-fr="<?= $st['fr'] ?>" data-en="<?= $st['en'] ?>"><?= $st['fr'] ?></div>
-            <div class="rdv-actions">
-              <a href="https://wa.me/<?= preg_replace('/\D/','',$rdv['phone']) ?>?text=Bonjour+<?= urlencode($rdv['name']) ?>+votre+RDV+<?= urlencode($rdv['service']) ?>+est+confirmé" target="_blank" class="rdv-btn wa"><i class="fa-brands fa-whatsapp"></i></a>
-              <a href="tel:<?= htmlspecialchars($rdv['phone']) ?>" class="rdv-btn call"><i class="fa-solid fa-phone"></i></a>
-              <button class="rdv-btn cancel" onclick="cancelRdv(<?= $rdv['id'] ?>, '<?= htmlspecialchars($rdv['name']) ?>')"><i class="fa-solid fa-xmark"></i></button>
-            </div>
+            <div class="cl-up-time"><?= date('H:i', strtotime($r['rdv_time'])) ?></div>
           </div>
           <?php endforeach; ?>
+          <?php if (empty($ups)): ?>
+          <div class="cl-empty-state" data-fr="Aucun RDV à venir" data-en="No upcoming bookings">Aucun RDV à venir</div>
+          <?php endif; ?>
         </div>
+      </div>
+
+      <!-- Popular services -->
+      <div class="cl-card">
+        <div class="cl-card-head">
+          <div class="cl-card-title" data-fr="Services actifs" data-en="Active services">Services actifs</div>
+        </div>
+        <?php foreach (array_filter($services, fn($s)=>$s['active']) as $svc): ?>
+        <div class="cl-svc-stat-row">
+          <div class="cl-svc-bar-accent" style="background:<?= h($svc['color']) ?>;"></div>
+          <div class="cl-svc-stat-nm"><?= h($svc['name']) ?></div>
+          <div class="cl-svc-stat-dur"><?= h($svc['duration']) ?></div>
+          <div class="cl-svc-stat-pr"><?= number_format((int)$svc['price'],0,',',' ') ?> F</div>
+        </div>
+        <?php endforeach; ?>
       </div>
     </div>
 
-    <!-- ══ DISPONIBILITÉS ══ -->
-    <div class="page" id="page-avail">
-      <div class="avail-layout">
-        <div class="avail-form-col">
-          <div class="content-card">
-            <div class="card-head">
-              <div class="card-title"><i class="fa-regular fa-clock"></i> <span data-fr="Mes disponibilités" data-en="My availability">Mes disponibilités</span></div>
-            </div>
-
-            <!-- ★ REAL FORM — saves to JSON ★ -->
-            <form method="POST" action="ClientLion.php#avail" id="avail-form">
-              <input type="hidden" name="action" value="save_availability">
-
-              <div class="avail-settings">
-                <div class="avail-setting-row">
-                  <div class="avail-setting-info">
-                    <div class="avail-setting-title" data-fr="Double réservation" data-en="Double booking">Double réservation</div>
-                    <div class="avail-setting-sub" data-fr="Accepter plusieurs clients au même créneau" data-en="Accept multiple clients at the same slot">Accepter plusieurs clients au même créneau</div>
-                  </div>
-                  <div class="toggle on" onclick="this.classList.toggle('on')"><div class="toggle-knob"></div></div>
-                </div>
-                <div class="avail-setting-row">
-                  <div class="avail-setting-info">
-                    <div class="avail-setting-title" data-fr="Durée des créneaux" data-en="Slot duration">Durée des créneaux</div>
-                    <div class="avail-setting-sub" data-fr="Intervalle entre chaque réservation" data-en="Interval between bookings">Intervalle entre chaque réservation</div>
-                  </div>
-                  <select class="slot-select">
-                    <option>15 min</option><option>30 min</option>
-                    <option selected>45 min</option><option>1 heure</option>
-                  </select>
-                </div>
-              </div>
-
-              <div class="days-list">
-                <?php foreach ($availability as $day):
-                  $key = strtolower($day['day_en']);
-                ?>
-                <div class="day-row <?= !$day['open'] ? 'closed' : '' ?>" id="day-<?= $key ?>">
-                  <!-- Hidden input: 1 = open, 0 = closed — updated by JS toggle -->
-                  <input type="hidden" name="open_<?= $key ?>" class="day-open-input"
-                         value="<?= $day['open'] ? '1' : '0' ?>">
-
-                  <div class="day-toggle <?= $day['open'] ? 'on' : 'off' ?>"
-                       onclick="toggleDay(this)">
-                    <div class="toggle-knob"></div>
-                  </div>
-
-                  <div class="day-name"
-                       data-fr="<?= $day['day'] ?>"
-                       data-en="<?= $day['day_en'] ?>">
-                    <?= $day['day'] ?>
-                  </div>
-
-                  <div class="day-times">
-                    <input type="time"
-                           name="start_<?= $key ?>"
-                           value="<?= $day['start'] ?: '08:00' ?>"
-                           class="time-input"
-                           onchange="updatePreview()">
-                    <span class="time-sep" data-fr="à" data-en="to">à</span>
-                    <input type="time"
-                           name="end_<?= $key ?>"
-                           value="<?= $day['end'] ?: '18:00' ?>"
-                           class="time-input"
-                           onchange="updatePreview()">
-                  </div>
-
-                  <?php if (!$day['open']): ?>
-                  <div class="day-closed-lbl" data-fr="Fermé" data-en="Closed">Fermé</div>
-                  <?php endif; ?>
-                </div>
-                <?php endforeach; ?>
-              </div>
-
-              <div class="avail-card-footer">
-                <button type="submit" class="save-btn"
-                        style="background:<?= htmlspecialchars($owner['theme_color']) ?>;"
-                        data-fr="Enregistrer les disponibilités"
-                        data-en="Save availability">
-                  Enregistrer les disponibilités
-                </button>
-              </div>
+    <!-- ══════════ PAGE: MES RDV ══════════ -->
+    <div class="cl-page hidden" id="page-rdv">
+      <div class="cl-page-header">
+        <h1 class="cl-page-title" data-fr="Mes RDV" data-en="My Bookings">Mes RDV</h1>
+        <p class="cl-page-sub" data-fr="Gérez, annulez, contactez vos clients" data-en="Manage, cancel, contact clients">Gérez, annulez, contactez vos clients</p>
+      </div>
+      <div class="cl-card">
+        <div class="cl-rdv-filters">
+          <button class="cl-filter-btn active" onclick="filterRdv('all',this)" data-fr="Tous" data-en="All">Tous</button>
+          <button class="cl-filter-btn" onclick="filterRdv('confirmed',this)" data-fr="Confirmés" data-en="Confirmed">Confirmés</button>
+          <button class="cl-filter-btn" onclick="filterRdv('cancelled',this)" data-fr="Annulés" data-en="Cancelled">Annulés</button>
+          <button class="cl-filter-btn" onclick="filterRdv('completed',this)" data-fr="Terminés" data-en="Completed">Terminés</button>
+        </div>
+        <?php if (empty($reservations)): ?>
+        <div class="cl-empty-state">Aucun rendez-vous pour le moment</div>
+        <?php endif; ?>
+        <?php foreach ($reservations as $r):
+          $dateObj = new DateTime($r['rdv_date']);
+          $statusMap = ['confirmed'=>'Confirmé','cancelled'=>'Annulé','completed'=>'Terminé','no_show'=>'Absent'];
+          $statusCls  = ['confirmed'=>'ok','cancelled'=>'cancel','completed'=>'done','no_show'=>'cancel'];
+        ?>
+        <div class="cl-rdv-item" data-status="<?= $r['status'] ?>">
+          <div class="cl-rdv-date">
+            <div class="cl-rdv-day"><?= $dateObj->format('d') ?></div>
+            <div class="cl-rdv-mon"><?= mb_strtoupper(mb_substr(strftime('%b',$dateObj->getTimestamp()),0,3)) ?></div>
+          </div>
+          <div class="cl-rdv-info">
+            <div class="cl-rdv-name"><?= h($r['prenom'].' '.$r['nom']) ?></div>
+            <div class="cl-rdv-svc"><?= h($r['services_list'] ?? 'Service') ?></div>
+          </div>
+          <div class="cl-rdv-time"><?= date('H:i', strtotime($r['rdv_time'])) ?></div>
+          <span class="cl-rdv-badge <?= $statusCls[$r['status']] ?? 'ok' ?>"><?= $statusMap[$r['status']] ?? $r['status'] ?></span>
+          <div class="cl-rdv-actions">
+            <a class="cl-rdv-btn cl-rdv-wa" href="https://wa.me/237<?= $r['whatsapp'] ?>?text=<?= urlencode('Bonjour '.$r['prenom'].', concernant votre RDV du '.date('d/m', strtotime($r['rdv_date'])).' à '.date('H:i',strtotime($r['rdv_time']))) ?>" target="_blank">WA</a>
+            <?php if ($r['status'] === 'confirmed'): ?>
+            <form method="POST" style="display:inline;">
+              <input type="hidden" name="action" value="cancel_reservation">
+              <input type="hidden" name="reservation_id" value="<?= $r['id'] ?>">
+              <button type="submit" class="cl-rdv-btn cl-rdv-cancel" onclick="return confirm('Annuler ce RDV ?')">Annuler</button>
             </form>
-            <!-- /avail-form -->
-
+            <?php endif; ?>
           </div>
         </div>
-
-        <!-- Phone preview -->
-        <div class="avail-preview-col">
-          <div class="avail-preview-label" data-fr="Aperçu — vue client" data-en="Preview — customer view">Aperçu — vue client</div>
-          <div class="phone-frame">
-            <div class="phone-notch"></div>
-            <div class="phone-screen" style="background:<?= htmlspecialchars($owner['theme_bg']) ?>;">
-              <div class="ph-header" style="background:<?= htmlspecialchars($owner['theme_color']) ?>;">
-                <div class="ph-biz-name"><?= htmlspecialchars($owner['name']) ?></div>
-                <div class="ph-avail-title" data-fr="Nos horaires" data-en="Our hours">Nos horaires</div>
-              </div>
-              <div class="ph-body">
-                <?php foreach ($availability as $day): ?>
-                <div class="ph-day <?= !$day['open'] ? 'ph-day-closed' : '' ?>">
-                  <span class="ph-day-name"
-                        data-fr="<?= substr($day['day'],0,3) ?>"
-                        data-en="<?= substr($day['day_en'],0,3) ?>">
-                    <?= substr($day['day'],0,3) ?>
-                  </span>
-                  <?php if ($day['open']): ?>
-                    <span class="ph-day-time"><?= $day['start'] ?> – <?= $day['end'] ?></span>
-                  <?php else: ?>
-                    <span class="ph-day-closed-txt" data-fr="Fermé" data-en="Closed">Fermé</span>
-                  <?php endif; ?>
-                </div>
-                <?php endforeach; ?>
-                <div class="ph-book-btn"
-                     style="background:<?= htmlspecialchars($owner['theme_color']) ?>;"
-                     data-fr="Prendre un RDV"
-                     data-en="Book appointment">Prendre un RDV</div>
-              </div>
-              <div class="ph-footer">
-                <span data-fr="Propulsé par" data-en="Powered by">Propulsé par</span>
-                <strong style="color:var(--gold);">LionRDV</strong>
-              </div>
-            </div>
-          </div>
-        </div>
+        <?php endforeach; ?>
       </div>
     </div>
 
-    <!-- ══ MES SERVICES ══ -->
-    <div class="page" id="page-services">
-      <div class="page-content">
-        <div class="content-card">
-          <div class="card-head">
-            <div class="card-title"><i class="fa-solid fa-list-ul"></i> <span data-fr="Mes services" data-en="My services">Mes services</span></div>
-            <button class="card-action" onclick="showAddService()" data-fr="+ Ajouter" data-en="+ Add">+ Ajouter</button>
-          </div>
-          <?php foreach ($services as $svc): ?>
-          <div class="svc-row">
-            <div class="svc-color-bar" style="background:<?= htmlspecialchars($svc['color']) ?>;"></div>
-            <div class="svc-info">
-              <div class="svc-name"><?= htmlspecialchars($svc['name']) ?></div>
-              <div class="svc-detail"><?= htmlspecialchars($svc['duration']) ?></div>
+    <!-- ══════════ PAGE: À VENIR ══════════ -->
+    <div class="cl-page hidden" id="page-upcoming">
+      <div class="cl-page-header">
+        <h1 class="cl-page-title" data-fr="Prochains rendez-vous" data-en="Upcoming appointments">Prochains rendez-vous</h1>
+        <p class="cl-page-sub">Les 14 prochains jours</p>
+      </div>
+      <div class="cl-card">
+        <?php
+        $upcoming = array_filter($reservations, fn($r) => $r['rdv_date'] >= date('Y-m-d') && $r['status']==='confirmed');
+        usort($upcoming, fn($a,$b) => strcmp($a['rdv_date'].$a['rdv_time'], $b['rdv_date'].$b['rdv_time']));
+        $cur_date = '';
+        foreach ($upcoming as $r):
+          $d = date('l d F Y', strtotime($r['rdv_date']));
+          if ($d !== $cur_date): $cur_date = $d; ?>
+          <div class="cl-upcoming-date-sep"><?= $d ?></div>
+          <?php endif; ?>
+          <div class="cl-upcoming-item">
+            <div class="cl-up-dot" style="background:var(--brand);"></div>
+            <div class="cl-up-info">
+              <div class="cl-up-nm"><?= h($r['prenom'].' '.$r['nom']) ?></div>
+              <div class="cl-up-svc"><?= h($r['services_list'] ?? '') ?></div>
             </div>
-            <div class="svc-price"><?= number_format($svc['price']) ?> F</div>
-            <div class="svc-actions">
-              <button class="svc-btn" data-fr="Modifier" data-en="Edit">Modifier</button>
-              <button class="svc-btn danger" data-fr="Supprimer" data-en="Delete">Supprimer</button>
+            <div class="cl-up-time"><?= date('H:i', strtotime($r['rdv_time'])) ?></div>
+            <a class="cl-rdv-btn cl-rdv-wa" href="https://wa.me/237<?= $r['whatsapp'] ?>?text=<?= urlencode('Bonjour '.$r['prenom'].', rappel pour votre RDV de demain à '.date('H:i',strtotime($r['rdv_time']))) ?>" target="_blank">WA</a>
+          </div>
+        <?php endforeach; ?>
+        <?php if (empty($upcoming)): ?><div class="cl-empty-state">Aucun RDV à venir</div><?php endif; ?>
+      </div>
+    </div>
+
+    <!-- ══════════ PAGE: WHATSAPP ══════════ -->
+    <div class="cl-page hidden" id="page-whatsapp">
+      <div class="cl-page-header">
+        <h1 class="cl-page-title" data-fr="Messages WhatsApp" data-en="WhatsApp Messages">Messages WhatsApp</h1>
+        <p class="cl-page-sub" data-fr="Envoyez un message pré-rédigé à vos clients" data-en="Send pre-written messages to clients">Envoyez un message pré-rédigé à vos clients</p>
+      </div>
+      <div class="cl-card">
+        <div class="cl-form-group">
+          <label class="cl-label" data-fr="Choisir un client" data-en="Select a client">Choisir un client</label>
+          <select class="cl-select" id="wa-client-select" onchange="updateWaTemplates()">
+            <option value="">— Sélectionnez un client —</option>
+            <?php foreach ($reservations as $r): if ($r['status']==='confirmed'): ?>
+            <option value="<?= h($r['whatsapp']) ?>" data-name="<?= h($r['prenom']) ?>" data-date="<?= h(date('d/m',strtotime($r['rdv_date']))) ?>" data-time="<?= h(date('H:i',strtotime($r['rdv_time']))) ?>" data-svc="<?= h($r['services_list']??'') ?>">
+              <?= h($r['prenom'].' '.$r['nom']) ?> · <?= h(date('d/m',strtotime($r['rdv_date']))) ?> <?= h(date('H:i',strtotime($r['rdv_time']))) ?>
+            </option>
+            <?php endif; endforeach; ?>
+          </select>
+        </div>
+      </div>
+      <div id="wa-templates">
+        <?php
+        $biz_nm = h($ownerData['biz_name']);
+        $templates = [
+          ['🔔','Rappel de RDV','Rappel','Bonjour {name} ! Rappel pour votre RDV chez '.$biz_nm.' le {date} à {time} pour {svc}. À bientôt !'],
+          ['✅','Confirmation','Confirmation','Bonjour {name} ! Votre RDV est confirmé chez '.$biz_nm.' le {date} à {time} pour {svc}. Besoin de modifier ? Répondez à ce message.'],
+          ['❌','Annulation','Annulation','Bonjour {name}, nous devons malheureusement annuler votre RDV du {date}. Nous vous contacterons pour le reprogrammer. Désolé(e) pour la gêne.'],
+          ['⭐','Demande d\'avis','Avis','Bonjour {name} ! Merci pour votre visite chez '.$biz_nm.' ! Votre avis nous aide à nous améliorer. Avez-vous été satisfait(e) ?'],
+          ['🎁','Offre spéciale','Offre','Bonjour {name} ! '.$biz_nm.' vous fait une offre exclusive. Réservez avant fin du mois et bénéficiez d\'une réduction.'],
+        ];
+        foreach ($templates as [$ico, $nm, $short, $msg]): ?>
+        <div class="cl-wa-card">
+          <div class="cl-wa-head">
+            <span class="cl-wa-ico"><?= $ico ?></span>
+            <div class="cl-wa-nm"><?= $nm ?></div>
+          </div>
+          <div class="cl-wa-msg" data-template="<?= h($msg) ?>"><?= h($msg) ?></div>
+          <a class="cl-wa-btn" href="#" id="wa-send-<?= $short ?>" onclick="sendWa('<?= h($msg) ?>',this)">
+            <svg style="width:1rem;height:1rem;fill:#fff;flex-shrink:0;" viewBox="0 0 24 24"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51a9.9 9.9 0 00-.57-.01c-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413z"/><path d="M12 0C5.373 0 0 5.373 0 12c0 2.122.554 4.118 1.524 5.847L.057 23.882l6.197-1.624A11.937 11.937 0 0012 24c6.627 0 12-5.373 12-12S18.627 0 12 0zm0 21.894a9.877 9.877 0 01-5.031-1.378l-.361-.214-3.741.981.998-3.648-.235-.374A9.857 9.857 0 012.103 12C2.103 6.57 6.57 2.103 12 2.103 17.43 2.103 21.897 6.57 21.897 12c0 5.43-4.467 9.894-9.897 9.894z"/></svg>
+            Envoyer via WhatsApp
+          </a>
+        </div>
+        <?php endforeach; ?>
+      </div>
+    </div>
+
+    <!-- ══════════ PAGE: DISPONIBILITÉS ══════════ -->
+    <div class="cl-page hidden" id="page-hours">
+      <div class="cl-page-header">
+        <h1 class="cl-page-title" data-fr="Disponibilités" data-en="Availability">Disponibilités</h1>
+        <p class="cl-page-sub" data-fr="Modifiez vos horaires d'ouverture" data-en="Edit your opening hours">Modifiez vos horaires d'ouverture</p>
+      </div>
+      <form method="POST" class="cl-card">
+        <input type="hidden" name="action" value="save_availability">
+        <?php
+        $avail_map = [];
+        foreach ($avail as $a) $avail_map[strtolower($a['day_en'])] = $a;
+        $days_list = [['monday','Lundi'],['tuesday','Mardi'],['wednesday','Mercredi'],
+                      ['thursday','Jeudi'],['friday','Vendredi'],['saturday','Samedi'],['sunday','Dimanche']];
+        foreach ($days_list as [$ek,$fr]):
+          $a    = $avail_map[$ek] ?? ['is_open'=>0,'open_time'=>'08:00','close_time'=>'18:00'];
+          $open = (int)$a['is_open'];
+        ?>
+        <div class="cl-day-row" id="row-<?= $ek ?>">
+          <label class="cl-day-tog">
+            <input type="checkbox" name="day_open_<?= $ek ?>" <?= $open?'checked':'' ?> onchange="togDay('<?= $ek ?>',this.checked)">
+            <span class="cl-day-knob"></span>
+          </label>
+          <span class="cl-day-nm <?= !$open?'cl-day-off':'' ?>" id="dnm-<?= $ek ?>"><?= $fr ?></span>
+          <div class="cl-day-times" id="dtimes-<?= $ek ?>" <?= !$open?'style="display:none"':'' ?>>
+            <input class="cl-time-inp" type="time" name="open_<?= $ek ?>" value="<?= h(substr($a['open_time']??'08:00',0,5)) ?>">
+            <span class="cl-day-sep">–</span>
+            <input class="cl-time-inp" type="time" name="close_<?= $ek ?>" value="<?= h(substr($a['close_time']??'18:00',0,5)) ?>">
+          </div>
+          <?php if (!$open): ?><span class="cl-day-closed" id="dclosed-<?= $ek ?>">Fermé</span><?php endif; ?>
+        </div>
+        <?php endforeach; ?>
+        <button type="submit" class="cl-btn-primary" style="margin-top:1rem;">Enregistrer les horaires</button>
+      </form>
+    </div>
+
+    <!-- ══════════ PAGE: MES SERVICES ══════════ -->
+    <div class="cl-page hidden" id="page-services">
+      <div class="cl-page-header">
+        <h1 class="cl-page-title" data-fr="Mes services" data-en="My services">Mes services</h1>
+        <p class="cl-page-sub" data-fr="Modifiez nom, durée, prix, description et couleur" data-en="Edit name, duration, price, description and color">Modifiez nom, durée, prix, description et couleur</p>
+      </div>
+      <form method="POST" class="cl-card">
+        <input type="hidden" name="action" value="save_services">
+        <?php foreach ($services as $svc): ?>
+        <div class="cl-svc-card <?= !$svc['active']?'cl-svc-inactive':'' ?>" id="svc-<?= $svc['id'] ?>">
+          <input type="hidden" name="svc_id[]" value="<?= $svc['id'] ?>">
+          <!-- Row 1: color + name + toggle -->
+          <div class="cl-svc-color-row">
+            <div class="cl-svc-bar-wrap">
+              <div class="cl-svc-bar-prev" id="bar-<?= $svc['id'] ?>" style="background:<?= h($svc['color']) ?>;"></div>
+              <input type="color" class="cl-clr-sw" name="svc_color_<?= $svc['id'] ?>" value="<?= h($svc['color']) ?>" oninput="document.getElementById('bar-<?= $svc['id'] ?>').style.background=this.value">
+            </div>
+            <input class="cl-input cl-svc-nm-inp" type="text" name="svc_name_<?= $svc['id'] ?>" value="<?= h($svc['name']) ?>" placeholder="Nom du service">
+            <label class="cl-svc-tog">
+              <input type="checkbox" name="svc_active_<?= $svc['id'] ?>" <?= $svc['active']?'checked':'' ?> onchange="toggleSvcCard(<?= $svc['id'] ?>,this.checked)">
+              <span class="cl-svc-knob"></span>
+            </label>
+          </div>
+          <!-- Row 2: duration + price -->
+          <div class="cl-svc-row2">
+            <div class="cl-form-group">
+              <label class="cl-label" data-fr="Durée" data-en="Duration">Durée</label>
+              <input class="cl-input" type="text" name="svc_dur_<?= $svc['id'] ?>" value="<?= h($svc['duration']) ?>" placeholder="45 min">
+            </div>
+            <div class="cl-form-group">
+              <label class="cl-label" data-fr="Prix (FCFA)" data-en="Price (FCFA)">Prix (FCFA)</label>
+              <input class="cl-input" type="number" name="svc_price_<?= $svc['id'] ?>" value="<?= h($svc['price']) ?>">
+            </div>
+          </div>
+          <!-- Row 3: description -->
+          <div class="cl-form-group">
+            <label class="cl-label" data-fr="Description courte" data-en="Short description">Description courte</label>
+            <input class="cl-input" type="text" name="svc_desc_<?= $svc['id'] ?>" value="<?= h($svc['description'] ?? '') ?>" placeholder="Description visible par les clients">
+          </div>
+        </div>
+        <?php endforeach; ?>
+        <button type="submit" class="cl-btn-primary" style="margin-top:1rem;">Enregistrer tout</button>
+      </form>
+    </div>
+
+    <!-- ══════════ PAGE: GALERIE ══════════ -->
+    <div class="cl-page hidden" id="page-gallery">
+      <div class="cl-page-header">
+        <h1 class="cl-page-title" data-fr="Galerie photos" data-en="Photo Gallery">Galerie photos</h1>
+        <?php $gal_max = (int)($ownerData['gal_max_photos'] ?? 9); $gal_count = count($gallery); ?>
+        <p class="cl-page-sub"><?= $gal_count ?> / <?= $gal_max ?> photos</p>
+      </div>
+      <!-- Upload zone -->
+      <?php if ($gal_count < $gal_max): ?>
+      <form method="POST" enctype="multipart/form-data" class="cl-card">
+        <input type="hidden" name="action" value="upload_gallery">
+        <div class="cl-gallery-upload-zone" onclick="document.getElementById('gal-main-inp').click()">
+          <svg style="width:2rem;height:2rem;stroke:var(--brand);fill:none;stroke-width:1.5;stroke-linecap:round;" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="3"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/></svg>
+          <div class="cl-guz-title" data-fr="Cliquez pour ajouter des photos" data-en="Click to add photos">Cliquez pour ajouter des photos</div>
+          <div class="cl-guz-sub">JPG, PNG, WEBP · <?= $gal_max - $gal_count ?> emplacements restants</div>
+          <input type="file" id="gal-main-inp" name="gallery_photos[]" accept="image/*" multiple style="display:none" onchange="this.form.submit()">
+        </div>
+        <!-- progress bar -->
+        <div style="margin-top:.75rem;height:6px;background:var(--cl-border);border-radius:3px;overflow:hidden;">
+          <div style="width:<?= round($gal_count/$gal_max*100) ?>%;height:100%;background:var(--brand);border-radius:3px;transition:width .3s;"></div>
+        </div>
+      </form>
+      <?php endif; ?>
+      <!-- Gallery grid -->
+      <div class="cl-card">
+        <div class="cl-gal-grid">
+          <?php foreach ($gallery as $img): ?>
+          <div class="cl-gal-item">
+            <img src="/LionRDV/<?= h($img['path']) ?>" alt="Photo galerie" loading="lazy">
+            <div class="cl-gal-overlay">
+              <form method="POST" style="display:inline;">
+                <input type="hidden" name="action" value="delete_gallery">
+                <input type="hidden" name="gallery_id" value="<?= $img['id'] ?>">
+                <button type="submit" class="cl-gal-del-btn" onclick="return confirm('Supprimer cette photo ?')">Supprimer</button>
+              </form>
             </div>
           </div>
           <?php endforeach; ?>
-          <div class="svc-add-row" onclick="showAddService()">
-            <i class="fa-solid fa-plus" style="color:<?= htmlspecialchars($owner['theme_color']) ?>;"></i>
-            <span style="color:<?= htmlspecialchars($owner['theme_color']) ?>;"
-                  data-fr="Ajouter un service" data-en="Add a service">Ajouter un service</span>
+          <?php for ($i = $gal_count; $i < $gal_max; $i++): ?>
+          <div class="cl-gal-empty">
+            <svg style="width:1.5rem;height:1.5rem;stroke:var(--cl-border-strong);fill:none;stroke-width:1.5;stroke-linecap:round;" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 8v8M8 12h8"/></svg>
           </div>
+          <?php endfor; ?>
         </div>
       </div>
     </div>
 
-    <!-- ══ QR CODE ══ -->
-    <div class="page" id="page-qr">
-      <div class="page-content">
-        <div class="qr-centered">
-          <div class="content-card qr-card">
-            <div class="card-head">
-              <div class="card-title"><i class="fa-solid fa-qrcode"></i> <span data-fr="Mon lien de réservation" data-en="My booking link">Mon lien de réservation</span></div>
-            </div>
-            <div class="qr-body">
-              <div class="qr-box">
-                <svg viewBox="0 0 100 100" width="140" height="140" xmlns="http://www.w3.org/2000/svg" style="border-radius:8px;background:#fff;padding:8px;">
-                  <rect width="100" height="100" fill="white"/>
-                  <rect x="5" y="5" width="28" height="28" rx="3" fill="#0A0A0A"/><rect x="8" y="8" width="22" height="22" rx="2" fill="white"/><rect x="12" y="12" width="14" height="14" rx="1" fill="#0A0A0A"/>
-                  <rect x="67" y="5" width="28" height="28" rx="3" fill="#0A0A0A"/><rect x="70" y="8" width="22" height="22" rx="2" fill="white"/><rect x="74" y="12" width="14" height="14" rx="1" fill="#0A0A0A"/>
-                  <rect x="5" y="67" width="28" height="28" rx="3" fill="#0A0A0A"/><rect x="8" y="70" width="22" height="22" rx="2" fill="white"/><rect x="12" y="74" width="14" height="14" rx="1" fill="#0A0A0A"/>
-                  <rect x="40" y="5" width="5" height="5" fill="#0A0A0A"/><rect x="48" y="5" width="5" height="5" fill="#0A0A0A"/>
-                  <rect x="40" y="40" width="5" height="5" fill="#0A0A0A"/><rect x="50" y="40" width="5" height="5" fill="#0A0A0A"/><rect x="60" y="40" width="5" height="5" fill="#0A0A0A"/>
-                  <rect x="5" y="40" width="5" height="5" fill="#0A0A0A"/><rect x="15" y="40" width="5" height="5" fill="#0A0A0A"/><rect x="25" y="40" width="5" height="5" fill="#0A0A0A"/>
-                  <rect x="70" y="40" width="5" height="5" fill="#0A0A0A"/><rect x="80" y="40" width="5" height="5" fill="#0A0A0A"/><rect x="90" y="40" width="5" height="5" fill="#0A0A0A"/>
-                  <rect x="40" y="70" width="5" height="5" fill="#0A0A0A"/><rect x="55" y="75" width="5" height="5" fill="#0A0A0A"/>
-                  <rect x="43" y="43" width="14" height="14" rx="3" fill="<?= htmlspecialchars($owner['theme_color']) ?>"/>
-                  <text x="50" y="53" text-anchor="middle" font-family="Arial" font-size="7" font-weight="bold" fill="white">LT</text>
-                </svg>
-              </div>
-              <div class="qr-link">lionrdv.cm/<?= htmlspecialchars($owner['slug']) ?></div>
-              <div class="qr-btns">
-                <button class="qr-btn black" onclick="copyLink()"><i class="fa-regular fa-copy"></i> <span data-fr="Copier le lien" data-en="Copy link">Copier le lien</span></button>
-                <button class="qr-btn outline"><i class="fa-solid fa-download"></i> <span data-fr="QR Code" data-en="QR Code">QR Code</span></button>
-                <a href="https://wa.me/?text=Réservez+chez+<?= urlencode($owner['name']) ?>+:+https://lionrdv.cm/<?= urlencode($owner['slug']) ?>" target="_blank" class="qr-btn wa"><i class="fa-brands fa-whatsapp"></i> WhatsApp</a>
-              </div>
-              <div class="qr-stats">
-                <div class="qs-card"><div class="qs-val"><?= $stats['views'] ?></div><div class="qs-lbl" data-fr="Vues ce mois" data-en="Views this month">Vues ce mois</div></div>
-                <div class="qs-card"><div class="qs-val"><?= $stats['month_rdv'] ?></div><div class="qs-lbl" data-fr="RDV pris" data-en="Bookings taken">RDV pris</div></div>
-                <div class="qs-card"><div class="qs-val">92%</div><div class="qs-lbl" data-fr="Taux conversion" data-en="Conversion rate">Taux conversion</div></div>
-              </div>
-            </div>
+    <!-- ══════════ PAGE: PROFIL ══════════ -->
+    <div class="cl-page hidden" id="page-profile">
+      <div class="cl-page-header">
+        <h1 class="cl-page-title" data-fr="Mon profil" data-en="My Profile">Mon profil</h1>
+        <p class="cl-page-sub" data-fr="Photo, nom, préférences, thème" data-en="Photo, name, preferences, theme">Photo, nom, préférences, thème</p>
+      </div>
+      <form method="POST" enctype="multipart/form-data" class="cl-card">
+        <input type="hidden" name="action" value="save_profile">
+        <!-- Avatar -->
+        <div class="cl-avatar-upload" onclick="document.getElementById('av-main-inp').click()">
+          <div class="cl-avatar-circle" style="background:<?= h($col) ?>;">
+            <?php if (!empty($ownerData['avatar_photo'])): ?>
+            <img src="/LionRDV/<?= h($ownerData['avatar_photo']) ?>" alt="Avatar" id="av-main-img">
+            <?php else: ?>
+            <span id="av-main-initials"><?= h($ownerData['initials']) ?></span>
+            <img id="av-main-img" src="" alt="" style="display:none;">
+            <?php endif; ?>
+          </div>
+          <div class="cl-avatar-hint" data-fr="Cliquez pour changer votre photo" data-en="Click to change your photo">Cliquez pour changer votre photo</div>
+          <input type="file" id="av-main-inp" name="avatar" accept="image/*" style="display:none" onchange="previewAvatar(this,'av-main-img','av-main-initials')">
+        </div>
+        <div class="cl-form-group">
+          <label class="cl-label" data-fr="Nom affiché" data-en="Display name">Nom affiché</label>
+          <input class="cl-input" type="text" name="owner_name" value="<?= h($ownerData['name'] ?? $ownerData['biz_name']) ?>">
+        </div>
+        <div class="cl-form-group">
+          <label class="cl-label">WhatsApp (identifiant — non modifiable)</label>
+          <input class="cl-input" type="text" value="+237 <?= h($ownerData['whatsapp']) ?>" readonly style="opacity:.6;cursor:not-allowed;">
+        </div>
+        <div class="cl-form-group">
+          <label class="cl-label" data-fr="Nouveau mot de passe" data-en="New password">Nouveau mot de passe</label>
+          <input class="cl-input" type="password" name="new_password" placeholder="Laisser vide pour ne pas changer">
+        </div>
+        <!-- Theme + Lang -->
+        <div class="cl-profile-prefs">
+          <div class="cl-pref-row">
+            <span class="cl-pref-lbl" data-fr="Thème sombre" data-en="Dark theme">Thème sombre</span>
+            <label class="cl-toggle">
+              <input type="checkbox" name="dark_mode" id="dark-mode-tog" <?= $dark_mode?'checked':'' ?> onchange="applyTheme(this.checked)">
+              <span class="cl-toggle-knob"></span>
+            </label>
+          </div>
+          <div class="cl-pref-row">
+            <span class="cl-pref-lbl" data-fr="Langue" data-en="Language">Langue</span>
+            <select class="cl-select cl-select-sm" name="language_pref" onchange="setLang(this.value,null)">
+              <option value="fr" <?= $lang_pref==='fr'?'selected':'' ?>>Français</option>
+              <option value="en" <?= $lang_pref==='en'?'selected':'' ?>>English</option>
+            </select>
           </div>
         </div>
-      </div>
-    </div>
-
-    <!-- ══ MON PROFIL ══ -->
-    <div class="page" id="page-profile">
-      <div class="page-content">
-        <div class="profile-grid">
-
-          <!-- Business info -->
-          <div class="content-card">
-            <div class="card-head">
-              <div class="card-title"><i class="fa-regular fa-building"></i> <span data-fr="Informations du business" data-en="Business information">Informations du business</span></div>
-            </div>
-            <div class="profile-form">
-
-              <!-- Logo -->
-              <div class="logo-upload-section">
-                <div class="biz-logo-preview"
-                     style="background:<?= htmlspecialchars($owner['theme_color']) ?>;"
-                     onclick="document.getElementById('logo-file').click()">
-                  <span><?= htmlspecialchars($owner['initials']) ?></span>
-                  <div class="logo-overlay"><i class="fa-solid fa-camera"></i></div>
-                </div>
-                <input type="file" id="logo-file" accept="image/*" hidden>
-                <div class="logo-info">
-                  <div class="logo-info-title" data-fr="Logo du business" data-en="Business logo">Logo du business</div>
-                  <div class="logo-info-sub" data-fr="Cliquez pour changer" data-en="Click to change">Cliquez pour changer</div>
-                  <div class="lt-badge">
-                    <div class="lt-badge-mark">LT</div>
-                    <span data-fr="LionTech apparaîtra aussi sur votre page" data-en="LionTech will also appear on your page">LionTech apparaîtra aussi sur votre page</span>
-                  </div>
-                </div>
-              </div>
-
-              <!-- ★ GALLERY UPLOAD SECTION ★ -->
-              <div class="gallery-upload-section">
-                <div class="gallery-upload-header">
-                  <div class="gallery-upload-title">
-                    <i class="fa-regular fa-images" style="color:<?= htmlspecialchars($owner['theme_color']) ?>;"></i>
-                    <span data-fr="Photos de la galerie" data-en="Gallery photos">Photos de la galerie</span>
-                  </div>
-                  <div class="gallery-upload-sub"
-                       data-fr="Ces photos apparaissent sur votre page publique"
-                       data-en="These photos appear on your public page">
-                    Ces photos apparaissent sur votre page publique
-                  </div>
-                </div>
-
-                <!-- Existing photos -->
-                <?php if (!empty($biz_gallery)): ?>
-                <div class="gallery-existing">
-                  <?php foreach ($biz_gallery as $photo): ?>
-                  <div class="gallery-thumb-wrap">
-                    <img src="../../<?= htmlspecialchars($photo['path']) ?>"
-                         alt="<?= htmlspecialchars($photo['alt'] ?? '') ?>"
-                         class="gallery-thumb">
-                    <form method="POST" action="ClientLion.php#profile"
-                          class="gallery-delete-form">
-                      <input type="hidden" name="action" value="delete_photo">
-                      <input type="hidden" name="photo_path"
-                             value="<?= htmlspecialchars($photo['path']) ?>">
-                      <button type="submit" class="gallery-delete-btn"
-                              onclick="return confirm('Supprimer cette photo ?')"
-                              title="Supprimer">
-                        <i class="fa-solid fa-xmark"></i>
-                      </button>
-                    </form>
-                  </div>
-                  <?php endforeach; ?>
-                </div>
-                <?php else: ?>
-                <div class="gallery-empty"
-                     data-fr="Aucune photo pour l'instant"
-                     data-en="No photos yet">
-                  <i class="fa-regular fa-image" style="font-size:28px;color:<?= htmlspecialchars($owner['theme_color']) ?>;opacity:0.4;margin-bottom:8px;"></i>
-                  <span>Aucune photo pour l'instant</span>
-                </div>
-                <?php endif; ?>
-
-                <!-- Upload form -->
-                <form method="POST"
-                      action="ClientLion.php#profile"
-                      enctype="multipart/form-data"
-                      id="gallery-form">
-                  <input type="hidden" name="action" value="upload_gallery">
-
-                  <label class="gallery-upload-btn"
-                         for="gallery-photos"
-                         style="border-color:<?= htmlspecialchars($owner['theme_color']) ?>;color:<?= htmlspecialchars($owner['theme_color']) ?>;">
-                    <i class="fa-solid fa-plus"></i>
-                    <span data-fr="Ajouter des photos" data-en="Add photos">Ajouter des photos</span>
-                    <input type="file"
-                           id="gallery-photos"
-                           name="gallery_photos[]"
-                           accept="image/*"
-                           multiple
-                           hidden
-                           onchange="previewGalleryPhotos(this)">
-                  </label>
-
-                  <!-- Preview before upload -->
-                  <div id="gallery-preview-row" class="gallery-preview-row" style="display:none;"></div>
-
-                  <button type="submit"
-                          id="gallery-save-btn"
-                          class="gallery-save-btn"
-                          style="background:<?= htmlspecialchars($owner['theme_color']) ?>;display:none;"
-                          data-fr="Enregistrer les photos"
-                          data-en="Save photos">
-                    <i class="fa-solid fa-floppy-disk"></i>
-                    Enregistrer les photos
-                  </button>
-                </form>
-              </div>
-              <!-- /gallery-upload-section -->
-
-              <!-- Profile fields -->
-              <div class="pf-row">
-                <div class="pf-field">
-                  <label data-fr="Nom du business" data-en="Business name">Nom du business</label>
-                  <input type="text" value="<?= htmlspecialchars($owner['name']) ?>">
-                </div>
-                <div class="pf-field">
-                  <label data-fr="Type" data-en="Type">Type</label>
-                  <input type="text" value="<?= htmlspecialchars($owner['type']) ?>">
-                </div>
-              </div>
-              <div class="pf-row">
-                <div class="pf-field">
-                  <label data-fr="Ville / Quartier" data-en="City / Area">Ville / Quartier</label>
-                  <input type="text" value="<?= htmlspecialchars($owner['location']) ?>">
-                </div>
-                <div class="pf-field">
-                  <label>WhatsApp</label>
-                  <input type="text" value="<?= htmlspecialchars($owner['whatsapp']) ?>">
-                </div>
-              </div>
-              <div class="pf-field full">
-                <label data-fr="Description" data-en="Description">Description</label>
-                <textarea rows="3" placeholder="Description visible sur votre page de réservation..."></textarea>
-              </div>
-            </div>
-          </div>
-
-          <!-- Theme -->
-          <div class="content-card">
-            <div class="card-head">
-              <div class="card-title"><i class="fa-solid fa-palette"></i> <span data-fr="Thème & couleurs" data-en="Theme & colors">Thème & couleurs</span></div>
-            </div>
-            <div class="profile-form">
-              <div class="theme-current">
-                <div class="theme-current-dot" id="current-color-dot" style="background:<?= htmlspecialchars($owner['theme_color']) ?>;"></div>
-                <span data-fr="Couleur principale" data-en="Main color">Couleur principale</span>
-                <strong id="current-color-name">Rose Beauté</strong>
-              </div>
-              <div class="theme-dots-row">
-                <div class="theme-cdot active" style="background:#D4447A;" onclick="selectTheme(this,'#D4447A','#FFF0F8','Rose Beauté')"></div>
-                <div class="theme-cdot" style="background:#0A0A0A;" onclick="selectTheme(this,'#0A0A0A','#FAFAF8','Noir & Or')"></div>
-                <div class="theme-cdot" style="background:#0EA5E9;" onclick="selectTheme(this,'#0EA5E9','#F0F9FF','Bleu Médical')"></div>
-                <div class="theme-cdot" style="background:#059669;" onclick="selectTheme(this,'#059669','#F0FDF4','Vert Santé')"></div>
-                <div class="theme-cdot" style="background:#E07B39;" onclick="selectTheme(this,'#E07B39','#FFF8F3','Orange Chaud')"></div>
-                <div class="theme-cdot" style="background:#7C3AED;" onclick="selectTheme(this,'#7C3AED','#F5F3FF','Violet Pro')"></div>
-                <div class="theme-cdot" style="background:#DC2626;" onclick="selectTheme(this,'#DC2626','#FFF5F5','Rouge Élégant')"></div>
-                <div class="theme-cdot" style="background:#1B4332;" onclick="selectTheme(this,'#1B4332','#F9F6F0','Vert & Or')"></div>
-              </div>
-              <div class="pf-field">
-                <label data-fr="Aperçu bouton client" data-en="Customer button preview">Aperçu bouton client</label>
-                <div class="btn-preview" id="btn-preview"
-                     style="background:<?= htmlspecialchars($owner['theme_color']) ?>;"
-                     data-fr="Prendre un RDV" data-en="Book appointment">Prendre un RDV</div>
-              </div>
-              <div class="lt-info-box">
-                <div class="lt-info-mark">LT</div>
-                <div>
-                  <div class="lt-info-title" data-fr="Branding LionTech inclus" data-en="LionTech branding included">Branding LionTech inclus</div>
-                  <div class="lt-info-sub" data-fr="Le logo LionTech apparaîtra toujours sur votre page client." data-en="LionTech logo will always appear on your client page.">Le logo LionTech apparaîtra toujours sur votre page client.</div>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          <!-- Account -->
-          <div class="content-card" style="grid-column:1/-1;">
-            <div class="card-head">
-              <div class="card-title"><i class="fa-regular fa-user"></i> <span data-fr="Compte" data-en="Account">Compte</span></div>
-            </div>
-            <div class="profile-form">
-              <div class="pf-row">
-                <div class="pf-field">
-                  <label data-fr="Email de connexion" data-en="Login email">Email de connexion</label>
-                  <input type="email" value="<?= htmlspecialchars($_SESSION['owner_email'] ?? '') ?>">
-                </div>
-                <div class="pf-field">
-                  <label data-fr="Nouveau mot de passe" data-en="New password">Nouveau mot de passe</label>
-                  <input type="password" placeholder="••••••••••">
-                </div>
-                <div class="pf-field">
-                  <label data-fr="Plan actuel" data-en="Current plan">Plan actuel</label>
-                  <div class="plan-pill"><?= htmlspecialchars($owner['plan']) ?> — 10 000 FCFA/mois</div>
-                </div>
-              </div>
-              <button class="save-btn"
-                      style="background:<?= htmlspecialchars($owner['theme_color']) ?>;"
-                      data-fr="Enregistrer les modifications"
-                      data-en="Save changes">
-                Enregistrer les modifications
-              </button>
-            </div>
-          </div>
-
+        <!-- Public page link -->
+        <div class="cl-public-link">
+          <div class="cl-public-url">lionrdv.cm/<?= h($slug) ?></div>
+          <a href="/LionRDV/Utilisateur%20du%20client/Utulisateur.php?slug=<?= urlencode($slug) ?>" target="_blank" class="cl-btn-secondary">Voir</a>
+          <button type="button" class="cl-btn-secondary" onclick="navigator.clipboard.writeText('lionrdv.cm/<?= h($slug) ?>')">Copier</button>
         </div>
-      </div>
+        <button type="submit" class="cl-btn-primary" style="margin-top:1rem;">Enregistrer les modifications</button>
+      </form>
     </div>
 
-  </main>
-</div>
-
-<!-- CANCEL MODAL -->
-<div class="modal-overlay" id="cancel-modal">
-  <div class="modal">
-    <div class="modal-icon"><i class="fa-solid fa-triangle-exclamation"></i></div>
-    <h2 class="modal-title" data-fr="Annuler ce RDV ?" data-en="Cancel this booking?">Annuler ce RDV ?</h2>
-    <p class="modal-sub">Êtes-vous sûr de vouloir annuler le RDV de <strong id="modal-name"></strong> ?</p>
-    <div class="modal-actions">
-      <button class="modal-btn cancel-btn" onclick="closeModal()" data-fr="Non, garder" data-en="No, keep">Non, garder</button>
-      <button class="modal-btn confirm-btn" id="modal-confirm" data-fr="Oui, annuler" data-en="Yes, cancel">Oui, annuler</button>
-    </div>
-  </div>
-</div>
-
-<!-- TOAST -->
-<div class="toast" id="toast"></div>
-
+  </main><!-- /cl-main -->
+</div><!-- /cl-app -->
 <?php endif; ?>
 
-<script src="ClientLion.js"></script>
+<script src="clientLion.js"></script>
 <script>
-/* ── Show PHP flash message as toast on page load ── */
-document.addEventListener('DOMContentLoaded', function() {
-  var flash = document.getElementById('php-flash');
-  if (flash) {
-    showToast(flash.dataset.msg, flash.dataset.type === 'success' ? 'success' : 'danger');
+/* ── Page navigation ───────────────────────────────────── */
+function goPage(id, navEl) {
+  document.querySelectorAll('.cl-page').forEach(p => p.classList.add('hidden'));
+  document.querySelectorAll('.cl-nav-item').forEach(n => n.classList.remove('active'));
+  const page = document.getElementById('page-' + id);
+  if (page) page.classList.remove('hidden');
+  if (navEl) navEl.classList.add('active');
+  const titles = {'dashboard':'Tableau de bord','rdv':'Mes RDV','upcoming':'À venir',
+    'whatsapp':'Messages WA','hours':'Disponibilités','services':'Mes services',
+    'gallery':'Galerie','profile':'Mon profil'};
+  const tb = document.getElementById('cl-page-title');
+  if (tb) tb.textContent = titles[id] || id;
+  window.scrollTo(0,0);
+  return false;
+}
+/* ── Sidebar mobile toggle ──────────────────────────────── */
+function toggleSidebar() {
+  document.getElementById('cl-sidebar').classList.toggle('open');
+}
+/* ── Day toggle ─────────────────────────────────────────── */
+function togDay(en, open) {
+  const nm = document.getElementById('dnm-'+en);
+  const times = document.getElementById('dtimes-'+en);
+  let closed = document.getElementById('dclosed-'+en);
+  if (nm) nm.classList.toggle('cl-day-off', !open);
+  if (times) times.style.display = open ? '' : 'none';
+  if (open && closed) closed.remove();
+  if (!open && !closed) {
+    const s = document.createElement('span');
+    s.className = 'cl-day-closed'; s.id = 'dclosed-'+en; s.textContent = 'Fermé';
+    document.getElementById('row-'+en)?.appendChild(s);
   }
-});
-
-/* ── Gallery photo preview before upload ── */
-function previewGalleryPhotos(input) {
-  var row     = document.getElementById('gallery-preview-row');
-  var saveBtn = document.getElementById('gallery-save-btn');
-  if (!row || !input.files || !input.files.length) return;
-
-  row.innerHTML = '';
-  row.style.display = 'flex';
-  saveBtn.style.display = 'flex';
-
-  Array.from(input.files).forEach(function(file) {
-    var reader = new FileReader();
-    reader.onload = function(e) {
-      var img = document.createElement('img');
-      img.src = e.target.result;
-      img.className = 'gallery-preview-thumb';
-      row.appendChild(img);
-    };
-    reader.readAsDataURL(file);
+}
+/* ── Password strength ──────────────────────────────────── */
+function checkPwdStrength(v) {
+  const fill = document.getElementById('pwd-fill');
+  const hint = document.getElementById('pwd-hint');
+  if (!fill) return;
+  const s = v.length < 6 ? 20 : v.length < 8 ? 45 : v.length < 12 ? 70 : 100;
+  const [color, label] = s < 45 ? ['#E74C3C','Trop court'] : s < 70 ? ['#E67E22','Moyen'] : ['#059669','Fort'];
+  fill.style.width = s + '%'; fill.style.background = color;
+  if (hint) { hint.textContent = label; hint.style.color = color; }
+}
+/* ── WA templates ───────────────────────────────────────── */
+function sendWa(template, btn) {
+  const sel = document.getElementById('wa-client-select');
+  if (!sel || !sel.value) { alert('Veuillez sélectionner un client d\'abord.'); return false; }
+  const opt = sel.options[sel.selectedIndex];
+  const msg = template
+    .replace(/{name}/g, opt.dataset.name || '')
+    .replace(/{date}/g, opt.dataset.date || '')
+    .replace(/{time}/g, opt.dataset.time || '')
+    .replace(/{svc}/g,  opt.dataset.svc  || '');
+  btn.href = 'https://wa.me/237' + sel.value + '?text=' + encodeURIComponent(msg);
+  return true;
+}
+/* ── Theme toggle ───────────────────────────────────────── */
+function applyTheme(dark) {
+  document.documentElement.setAttribute('data-theme', dark ? 'dark' : 'light');
+}
+/* ── Language ───────────────────────────────────────────── */
+function setLang(lang, btn) {
+  document.querySelectorAll('.cl-lang-btn').forEach(b => b.classList.remove('on'));
+  if (btn) btn.classList.add('on');
+  document.querySelectorAll('[data-' + lang + ']').forEach(el => {
+    el.textContent = el.getAttribute('data-' + lang);
   });
 }
-
-/* ── Toggle day open/closed — updates hidden input ── */
-function toggleDay(btn) {
-  var isOn = btn.classList.contains('on');
-  btn.classList.toggle('on',  !isOn);
-  btn.classList.toggle('off',  isOn);
-  var row       = btn.closest('.day-row');
-  var hidden    = row.querySelector('.day-open-input');
-  var closedLbl = row.querySelector('.day-closed-lbl');
-  row.classList.toggle('closed', isOn);
-  if (hidden)    hidden.value = isOn ? '0' : '1';
-  if (closedLbl) closedLbl.style.display = isOn ? '' : 'none';
-  updatePreview();
+/* ── Service card toggle ────────────────────────────────── */
+function toggleSvcCard(id, active) {
+  const card = document.getElementById('svc-' + id);
+  if (card) card.classList.toggle('cl-svc-inactive', !active);
 }
+/* ── Avatar preview ─────────────────────────────────────── */
+function previewAvatar(input, imgId, initId) {
+  const file = input.files[0]; if (!file) return;
+  const r = new FileReader();
+  r.onload = e => {
+    const img = document.getElementById(imgId || 'av-img');
+    const ini = document.getElementById(initId || 'av-initials');
+    if (img) { img.src = e.target.result; img.style.display = 'block'; }
+    if (ini) ini.style.display = 'none';
+  };
+  r.readAsDataURL(file);
+}
+/* ── Gallery preview (onboarding) ───────────────────────── */
+function previewGallery(input) {
+  const grid = document.getElementById('gal-preview-grid'); if (!grid) return;
+  grid.innerHTML = '';
+  Array.from(input.files).forEach(file => {
+    const r = new FileReader();
+    r.onload = e => {
+      const d = document.createElement('div');
+      d.className = 'cl-gal-preview-item';
+      d.innerHTML = '<img src="'+e.target.result+'" alt="">';
+      grid.appendChild(d);
+    };
+    r.readAsDataURL(file);
+  });
+}
+/* ── Skip onboarding step ───────────────────────────────── */
+function skipStep() {
+  const f = document.createElement('form');
+  f.method = 'POST';
+  f.innerHTML = '<input name="action" value="onboard_gallery"><input name="gallery_photos[]" value="">';
+  document.body.appendChild(f); f.submit();
+}
+/* ── Auto-hide alerts ───────────────────────────────────── */
+document.querySelectorAll('.cl-alert-floating').forEach(el => {
+  setTimeout(() => { el.style.opacity = '0'; setTimeout(() => el.remove(), 400); }, 3000);
+});
 </script>
 </body>
 </html>

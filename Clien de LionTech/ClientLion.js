@@ -1,311 +1,273 @@
 /* ============================================================
-   clientLion.js — LionRDV Owner Dashboard
-   Handles: navigation, language, theme, modals, toast, toggles
+   clientLion.js — LionRDV Espace Propriétaire
+   Gère : navigation, filtres RDV, thème, langue, previews
    ============================================================ */
 
-/* ── LANGUAGE ─────────────────────────────────────────── */
-let currentLang = 'fr';
-
-function setLang(lang, btn) {
-  currentLang = lang;
-
-  // update lang buttons
-  document.querySelectorAll('.lf-lb, .lang-btn').forEach(b => b.classList.remove('active', 'on'));
+/* ── Filtre des RDV par statut ────────────────────────────
+   Affecte : la liste des rendez-vous dans "Mes RDV"
+────────────────────────────────────────────────────────── */
+function filterRdv(status, btn) {
+  document.querySelectorAll('.cl-filter-btn').forEach(b => b.classList.remove('active'));
   if (btn) btn.classList.add('active');
 
-  // update all [data-fr] / [data-en] elements
-  document.querySelectorAll('[data-fr]').forEach(el => {
-    const val = lang === 'fr' ? el.dataset.fr : el.dataset.en;
-    if (val !== undefined) {
-      // if it's an input placeholder
-      if (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA') {
-        el.placeholder = val;
-      } else {
-        el.textContent = val;
-      }
+  document.querySelectorAll('.cl-rdv-item').forEach(item => {
+    if (status === 'all' || item.dataset.status === status) {
+      item.style.display = '';
+    } else {
+      item.style.display = 'none';
     }
   });
 }
 
-/* ── PAGE NAVIGATION ──────────────────────────────────── */
-function showPage(pageId, clickedLink) {
-  // hide all pages
-  document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+/* ── Mise à jour des messages WhatsApp avec les données client
+   Affecte : les modèles de messages sur la page WhatsApp
+────────────────────────────────────────────────────────── */
+function updateWaTemplates() {
+  const sel = document.getElementById('wa-client-select');
+  if (!sel) return;
 
-  // show target
-  const target = document.getElementById('page-' + pageId);
-  if (target) target.classList.add('active');
+  const opt  = sel.options[sel.selectedIndex];
+  const name = opt?.dataset?.name  || '';
+  const date = opt?.dataset?.date  || '';
+  const time = opt?.dataset?.time  || '';
+  const svc  = opt?.dataset?.svc   || '';
+  const wa   = sel.value           || '';
 
-  // update sidebar active state
-  document.querySelectorAll('.ds-nav-item').forEach(item => item.classList.remove('active'));
-  if (clickedLink) {
-    // handle both element passed directly and event target
-    const el = clickedLink.target ? clickedLink.currentTarget : clickedLink;
-    el.classList.add('active');
-  }
+  document.querySelectorAll('.cl-wa-msg').forEach(el => {
+    const template = el.dataset.template || el.textContent;
+    el.textContent = template
+      .replace(/{name}/g, name)
+      .replace(/{date}/g, date)
+      .replace(/{time}/g, time)
+      .replace(/{svc}/g,  svc);
+  });
 
-  // update topbar title
-  const titles = {
-    dashboard: { fr: 'Dashboard',          en: 'Dashboard' },
-    rdv:       { fr: 'Mes réservations',   en: 'My bookings' },
-    avail:     { fr: 'Disponibilités',     en: 'Availability' },
-    services:  { fr: 'Mes services',       en: 'My services' },
-    qr:        { fr: 'QR Code & Mon lien', en: 'QR Code & My link' },
-    profile:   { fr: 'Mon profil',         en: 'My profile' },
-  };
-
-  const titleEl = document.getElementById('page-title');
-  if (titleEl && titles[pageId]) {
-    titleEl.textContent = titles[pageId][currentLang] || titles[pageId]['fr'];
-    titleEl.dataset.fr = titles[pageId].fr;
-    titleEl.dataset.en = titles[pageId].en;
-  }
-
-  // scroll to top
-  const main = document.querySelector('.dash-main');
-  if (main) main.scrollTo({ top: 0, behavior: 'smooth' });
+  document.querySelectorAll('.cl-wa-btn').forEach(btn => {
+    const tmpl = btn.previousElementSibling;
+    if (!tmpl) return;
+    const msg = tmpl.textContent;
+    if (wa) {
+      btn.href = 'https://wa.me/237' + wa + '?text=' + encodeURIComponent(msg);
+    } else {
+      btn.href = '#';
+    }
+  });
 }
 
-/* ── CANCEL MODAL ─────────────────────────────────────── */
-let pendingCancelId = null;
-
-function cancelRdv(id, name) {
-  pendingCancelId = id;
-  const nameEl = document.getElementById('modal-name');
-  if (nameEl) nameEl.textContent = name;
-  const modal = document.getElementById('cancel-modal');
-  if (modal) modal.classList.add('open');
+/* ── Application du thème clair/sombre ───────────────────
+   Affecte : data-theme sur <html> → toutes les CSS variables
+────────────────────────────────────────────────────────── */
+function applyTheme(dark) {
+  document.documentElement.setAttribute('data-theme', dark ? 'dark' : 'light');
 }
 
-function closeModal() {
-  const modal = document.getElementById('cancel-modal');
-  if (modal) modal.classList.remove('open');
-  pendingCancelId = null;
+/* ── Changement de langue FR/EN ──────────────────────────
+   Affecte : tous les éléments avec attribut data-fr/data-en
+────────────────────────────────────────────────────────── */
+function setLang(lang, btn) {
+  /* Mettre à jour les boutons FR/EN */
+  document.querySelectorAll('.cl-lang-btn').forEach(b => b.classList.remove('on'));
+  if (btn) btn.classList.add('on');
+
+  /* Traduire tous les éléments marqués */
+  const attr = 'data-' + lang;
+  document.querySelectorAll('[' + attr + ']').forEach(el => {
+    const val = el.getAttribute(attr);
+    if (val) el.textContent = val;
+  });
+
+  /* Mettre à jour le sélecteur de langue dans le profil si présent */
+  const langSel = document.querySelector('select[name="language_pref"]');
+  if (langSel) langSel.value = lang;
 }
 
-document.addEventListener('DOMContentLoaded', function () {
+/* ── Toggle du sidebar mobile ─────────────────────────────
+   Affecte : sidebar sur mobile (class .open)
+────────────────────────────────────────────────────────── */
+function toggleSidebar() {
+  document.getElementById('cl-sidebar')?.classList.toggle('open');
+}
 
-  // confirm cancel
-  const confirmBtn = document.getElementById('modal-confirm');
-  if (confirmBtn) {
-    confirmBtn.addEventListener('click', function () {
-      if (pendingCancelId !== null) {
-        // find and remove the rdv row
-        const rows = document.querySelectorAll('.rdv-row');
-        rows.forEach(row => {
-          const cancelBtn = row.querySelector('.rdv-btn.cancel');
-          if (cancelBtn) {
-            const onclickAttr = cancelBtn.getAttribute('onclick');
-            if (onclickAttr && onclickAttr.includes('cancelRdv(' + pendingCancelId + ',')) {
-              row.style.transition = 'opacity 0.3s, height 0.3s';
-              row.style.opacity = '0';
-              setTimeout(() => row.remove(), 300);
-            }
-          }
-        });
-        closeModal();
-        showToast(currentLang === 'fr' ? 'RDV annulé avec succès' : 'Booking cancelled successfully', 'danger');
-      }
-    });
+/* Fermer le sidebar en cliquant en dehors */
+document.addEventListener('click', function(e) {
+  const sidebar = document.getElementById('cl-sidebar');
+  const menuBtn = document.querySelector('.cl-menu-btn');
+  if (!sidebar || !menuBtn) return;
+  if (!sidebar.contains(e.target) && !menuBtn.contains(e.target)) {
+    sidebar.classList.remove('open');
   }
-
-  // close modal on overlay click
-  const overlay = document.getElementById('cancel-modal');
-  if (overlay) {
-    overlay.addEventListener('click', function (e) {
-      if (e.target === overlay) closeModal();
-    });
-  }
-
-  // close modal on ESC
-  document.addEventListener('keydown', function (e) {
-    if (e.key === 'Escape') closeModal();
-  });
-
-  /* ── FILTER TABS ── */
-  document.querySelectorAll('.filter-tab').forEach(tab => {
-    tab.addEventListener('click', function () {
-      document.querySelectorAll('.filter-tab').forEach(t => t.classList.remove('active'));
-      this.classList.add('active');
-      // In production: filter rows by date. For now just visual.
-    });
-  });
-
-  /* ── DAY TOGGLES (availability) ── */
-  document.querySelectorAll('.day-toggle').forEach(toggle => {
-    toggle.addEventListener('click', function () {
-      const isOn = this.classList.contains('on');
-      this.classList.toggle('on', !isOn);
-      this.classList.toggle('off', isOn);
-      const row = this.closest('.day-row');
-      if (row) row.classList.toggle('closed', isOn);
-      updatePhonePreview();
-    });
-  });
-
-  /* ── TIME INPUTS ── */
-  document.querySelectorAll('.time-input').forEach(input => {
-    input.addEventListener('change', updatePhonePreview);
-  });
-
-  /* ── LOGO FILE INPUT ── */
-  const logoFile = document.getElementById('logo-file');
-  if (logoFile) {
-    logoFile.addEventListener('change', function () {
-      if (this.files && this.files[0]) {
-        const reader = new FileReader();
-        reader.onload = function (e) {
-          const preview = document.querySelector('.biz-logo-preview');
-          if (preview) {
-            preview.innerHTML = `<img src="${e.target.result}" style="width:100%;height:100%;object-fit:cover;border-radius:inherit;">`;
-          }
-        };
-        reader.readAsDataURL(this.files[0]);
-      }
-    });
-  }
-
-  /* ── PASSWORD TOGGLE ── */
-  // handled by togglePwd() below
-
 });
 
-/* ── TOAST ─────────────────────────────────────────────── */
-let toastTimer = null;
+/* ── Navigation entre pages ──────────────────────────────
+   Affecte : visibilité des .cl-page
+────────────────────────────────────────────────────────── */
+function goPage(id, navEl) {
+  /* Cacher toutes les pages */
+  document.querySelectorAll('.cl-page').forEach(p => p.classList.add('hidden'));
 
-function showToast(message, type = 'success') {
-  const toast = document.getElementById('toast');
-  if (!toast) return;
+  /* Désactiver tous les items de nav */
+  document.querySelectorAll('.cl-nav-item').forEach(n => n.classList.remove('active'));
 
-  const colors = {
-    success: '#059669',
-    danger:  '#DC2626',
-    info:    '#C9A84C',
+  /* Afficher la page cible */
+  const page = document.getElementById('page-' + id);
+  if (page) page.classList.remove('hidden');
+
+  /* Activer l'item de nav */
+  if (navEl) navEl.classList.add('active');
+
+  /* Mettre à jour le titre dans la topbar */
+  const titles = {
+    dashboard:  'Tableau de bord',
+    rdv:        'Mes RDV',
+    upcoming:   'À venir',
+    whatsapp:   'Messages WA',
+    hours:      'Disponibilités',
+    services:   'Mes services',
+    gallery:    'Galerie',
+    profile:    'Mon profil',
   };
+  const tb = document.getElementById('cl-page-title');
+  if (tb) tb.textContent = titles[id] || id;
 
-  toast.textContent = message;
-  toast.style.background = colors[type] || colors.info;
-  toast.classList.add('show');
+  /* Remonter en haut de la page */
+  window.scrollTo(0, 0);
 
-  if (toastTimer) clearTimeout(toastTimer);
-  toastTimer = setTimeout(() => toast.classList.remove('show'), 3000);
+  /* Fermer le sidebar mobile */
+  document.getElementById('cl-sidebar')?.classList.remove('open');
+
+  return false; /* Empêcher la navigation href */
 }
 
-/* ── COPY LINK ─────────────────────────────────────────── */
-function copyLink() {
-  const linkEl = document.querySelector('.qr-link');
-  if (!linkEl) return;
+/* ── Toggle d'un jour de disponibilité ───────────────────
+   Affecte : page Disponibilités et onboarding étape 2
+────────────────────────────────────────────────────────── */
+function togDay(en, open) {
+  const nm     = document.getElementById('dnm-' + en);
+  const times  = document.getElementById('dtimes-' + en);
+  let   closed = document.getElementById('dclosed-' + en);
 
-  const text = 'https://' + linkEl.textContent.trim();
-  if (navigator.clipboard) {
-    navigator.clipboard.writeText(text).then(() => {
-      showToast(currentLang === 'fr' ? 'Lien copié !' : 'Link copied!', 'success');
-    });
-  } else {
-    // fallback
-    const ta = document.createElement('textarea');
-    ta.value = text;
-    document.body.appendChild(ta);
-    ta.select();
-    document.execCommand('copy');
-    document.body.removeChild(ta);
-    showToast(currentLang === 'fr' ? 'Lien copié !' : 'Link copied!', 'success');
+  if (nm)    nm.classList.toggle('cl-day-off', !open);
+  if (times) times.style.display = open ? '' : 'none';
+
+  if (open && closed) {
+    closed.remove();
+  } else if (!open && !closed) {
+    const s = document.createElement('span');
+    s.className = 'cl-day-closed';
+    s.id        = 'dclosed-' + en;
+    s.textContent = 'Fermé';
+    document.getElementById('row-' + en)?.appendChild(s);
   }
 }
 
-/* ── THEME SELECTOR ────────────────────────────────────── */
-function selectTheme(dot, color, bg, name) {
-  // update active dot
-  document.querySelectorAll('.theme-cdot').forEach(d => d.classList.remove('active'));
-  dot.classList.add('active');
+/* ── Force du mot de passe ───────────────────────────────
+   Affecte : barre de force sur les pages password
+────────────────────────────────────────────────────────── */
+function checkPwdStrength(v) {
+  const fill = document.getElementById('pwd-fill');
+  const hint = document.getElementById('pwd-hint');
+  if (!fill) return;
 
-  // update color indicator
-  const colorDot = document.getElementById('current-color-dot');
-  if (colorDot) colorDot.style.background = color;
+  let score = 0;
+  if (v.length >= 6)  score += 25;
+  if (v.length >= 8)  score += 25;
+  if (v.length >= 12) score += 20;
+  if (/[A-Z]/.test(v)) score += 15;
+  if (/[0-9!@#$%]/.test(v)) score += 15;
 
-  const colorName = document.getElementById('current-color-name');
-  if (colorName) colorName.textContent = name;
+  const color = score < 40 ? '#E74C3C' : score < 70 ? '#E67E22' : '#059669';
+  const label = score < 40 ? 'Trop court' : score < 70 ? 'Moyen' : 'Fort ✓';
 
-  // update button preview
-  const btnPreview = document.getElementById('btn-preview');
-  if (btnPreview) btnPreview.style.background = color;
-
-  showToast(
-    (currentLang === 'fr' ? 'Thème appliqué : ' : 'Theme applied: ') + name,
-    'info'
-  );
+  fill.style.width      = Math.min(score, 100) + '%';
+  fill.style.background = color;
+  if (hint) { hint.textContent = label; hint.style.color = color; }
 }
 
-/* ── AVAILABILITY SAVE ─────────────────────────────────── */
-function saveAvail() {
-  showToast(
-    currentLang === 'fr' ? 'Disponibilités enregistrées !' : 'Availability saved!',
-    'success'
-  );
+/* ── Toggle visibilité d'une carte service ───────────────
+   Affecte : opacité de la carte service (actif/inactif)
+────────────────────────────────────────────────────────── */
+function toggleSvcCard(id, active) {
+  const card = document.getElementById('svc-' + id);
+  if (card) card.classList.toggle('cl-svc-inactive', !active);
 }
 
-/* ── PHONE PREVIEW UPDATE ──────────────────────────────── */
-function updatePhonePreview() {
-  const dayRows     = document.querySelectorAll('.days-list .day-row');
-  const phDays      = document.querySelectorAll('.ph-day');
-  const phDayTimes  = document.querySelectorAll('.ph-day-time');
-  const phDayClosed = document.querySelectorAll('.ph-day-closed-txt');
+/* ── Prévisualisation avatar ─────────────────────────────
+   Affecte : cercle avatar dans profil et onboarding
+────────────────────────────────────────────────────────── */
+function previewAvatar(input, imgId, initId) {
+  const file = input.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = function(e) {
+    const img  = document.getElementById(imgId  || 'av-img');
+    const init = document.getElementById(initId || 'av-initials');
+    if (img)  { img.src = e.target.result; img.style.display = 'block'; }
+    if (init) init.style.display = 'none';
+  };
+  reader.readAsDataURL(file);
+}
 
-  dayRows.forEach((row, i) => {
-    const isClosed = row.classList.contains('closed');
-    const phDay    = phDays[i];
-    if (!phDay) return;
-
-    phDay.classList.toggle('ph-day-closed', isClosed);
-
-    const timeInputs = row.querySelectorAll('.time-input');
-    const phTime     = phDayTimes[i];
-    const phClosed   = phDayClosed[i];
-
-    if (phTime && timeInputs.length >= 2) {
-      phTime.textContent  = timeInputs[0].value + ' – ' + timeInputs[1].value;
-      phTime.style.display = isClosed ? 'none' : '';
-    }
-    if (phClosed) {
-      phClosed.style.display = isClosed ? '' : 'none';
-    }
+/* ── Prévisualisation galerie (onboarding) ───────────────
+   Affecte : grille de preview dans l'étape galerie
+────────────────────────────────────────────────────────── */
+function previewGallery(input) {
+  const grid = document.getElementById('gal-preview-grid');
+  if (!grid) return;
+  grid.innerHTML = '';
+  Array.from(input.files).forEach(file => {
+    const reader = new FileReader();
+    reader.onload = function(e) {
+      const div = document.createElement('div');
+      div.className = 'cl-gal-preview-item';
+      div.innerHTML = '<img src="' + e.target.result + '" alt="">';
+      grid.appendChild(div);
+    };
+    reader.readAsDataURL(file);
   });
 }
 
-/* ── ADD SERVICE ───────────────────────────────────────── */
-function showAddService() {
-  showToast(
-    currentLang === 'fr' ? 'Fonctionnalité bientôt disponible' : 'Feature coming soon',
-    'info'
-  );
+/* ── Passer une étape d'onboarding ───────────────────────
+   Affecte : progression de l'onboarding
+────────────────────────────────────────────────────────── */
+function skipStep() {
+  const form = document.createElement('form');
+  form.method = 'POST';
+  const input = document.createElement('input');
+  input.type  = 'hidden';
+  input.name  = 'action';
+  input.value = 'onboard_gallery';
+  form.appendChild(input);
+  document.body.appendChild(form);
+  form.submit();
 }
 
-/* ── PASSWORD TOGGLE ───────────────────────────────────── */
-function togglePwd() {
-  const pwd     = document.getElementById('lf-pwd');
-  const eyeIcon = document.getElementById('eye-icon');
-  if (!pwd) return;
-
-  if (pwd.type === 'password') {
-    pwd.type = 'text';
-    if (eyeIcon) { eyeIcon.classList.remove('fa-eye'); eyeIcon.classList.add('fa-eye-slash'); }
-  } else {
-    pwd.type = 'password';
-    if (eyeIcon) { eyeIcon.classList.remove('fa-eye-slash'); eyeIcon.classList.add('fa-eye'); }
+/* ── Envoyer un message WhatsApp ─────────────────────────
+   Affecte : bouton "Envoyer via WhatsApp" sur les templates
+────────────────────────────────────────────────────────── */
+function sendWa(template, link) {
+  const sel = document.getElementById('wa-client-select');
+  if (!sel || !sel.value) {
+    alert('Veuillez sélectionner un client d\'abord.');
+    return false;
   }
+  const opt  = sel.options[sel.selectedIndex];
+  const msg  = template
+    .replace(/{name}/g, opt.dataset.name || '')
+    .replace(/{date}/g, opt.dataset.date || '')
+    .replace(/{time}/g, opt.dataset.time || '')
+    .replace(/{svc}/g,  opt.dataset.svc  || '');
+  link.href = 'https://wa.me/237' + sel.value + '?text=' + encodeURIComponent(msg);
+  return true;
 }
 
-/* ── LOGIN FORM SUBMIT FEEDBACK ────────────────────────── */
-document.addEventListener('DOMContentLoaded', function () {
-  const loginForm = document.querySelector('.lf-form');
-  if (loginForm) {
-    loginForm.addEventListener('submit', function () {
-      const btn = this.querySelector('.lf-submit');
-      if (btn) {
-        btn.style.background = '#555';
-        btn.querySelector('span[data-fr]').textContent =
-          currentLang === 'fr' ? 'Connexion...' : 'Signing in...';
-      }
-    });
-  }
+/* ── Auto-cacher les alertes flottantes ──────────────────
+   Affecte : messages de succès/erreur qui apparaissent
+────────────────────────────────────────────────────────── */
+document.addEventListener('DOMContentLoaded', function() {
+  document.querySelectorAll('.cl-alert-floating').forEach(el => {
+    setTimeout(() => {
+      el.style.opacity = '0';
+      setTimeout(() => el.remove(), 400);
+    }, 3500);
+  });
 });

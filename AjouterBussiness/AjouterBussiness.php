@@ -1,173 +1,175 @@
 <?php
-/* ============================================================
-   AjouterBussiness.php — LionRDV Admin
-   Sauvegarde les données dans /LionRDV/data/[slug].json
-   Utulisateur.php lit ce fichier pour afficher la page client
-============================================================ */
-$currentPage   = 'add_business';
-$businessCount = 6;
-$qrCount       = 3;
-$alertCount    = 2;
+session_start();
+ini_set('display_errors', 1);
+error_reporting(E_ALL);
+require_once __DIR__ . '/../db.php';
 
-/* ── DOSSIER DATA ─────────────────────────────────────────
-   Crée C:\Xampp\htdocs\LionRDV\data\ si il n'existe pas
-──────────────────────────────────────────────────────────── */
-$data_dir = dirname(__DIR__) . '/data';
-if (!is_dir($data_dir)) {
-  mkdir($data_dir, 0755, true);
-}
+$currentPage = 'add_business';
 
-/* ── THEMES MAP ───────────────────────────────────────────
-   Convertit la couleur choisie en couleur de fond
-──────────────────────────────────────────────────────────── */
+/* ── Correspondance couleur principale → couleur de fond légère ── */
 $theme_bg_map = [
-  '#D4447A' => '#FFF0F8',
-  '#0A0A0A' => '#FAFAF8',
-  '#0EA5E9' => '#F0F9FF',
-  '#059669' => '#F0FDF4',
-  '#E07B39' => '#FFF8F3',
-  '#7C3AED' => '#F5F3FF',
-  '#DC2626' => '#FFF5F5',
-  '#1B4332' => '#F9F6F0',
+  '#D4447A' => '#FFF0F8', '#0A0A0A' => '#FAFAF8', '#0EA5E9' => '#F0F9FF',
+  '#059669' => '#F0FDF4', '#E07B39' => '#FFF8F3', '#7C3AED' => '#F5F3FF',
+  '#DC2626' => '#FFF5F5', '#1B4332' => '#F9F6F0', '#C9A84C' => '#FFF9EE',
 ];
 
 $save_success = false;
 $save_error   = '';
 $saved_slug   = '';
+$prefill      = [];
 
-/* ── MODE ÉDITION ─────────────────────────────────────────
-   Si ?edit=slug dans l'URL, charge les données existantes
-──────────────────────────────────────────────────────────── */
-$edit_slug = trim($_GET['edit'] ?? '');
-$edit_mode = !empty($edit_slug);
-$prefill   = [];
+/* ── Helpers PHP ── */
+function h(?string $v): string { return htmlspecialchars((string)$v, ENT_QUOTES, 'UTF-8'); }
+function pre(string $k, string $d = ''): string { global $prefill; return h((string)($prefill[$k] ?? $d)); }
 
-if ($edit_mode) {
-  $edit_file = $data_dir . '/' . $edit_slug . '.json';
-  if (file_exists($edit_file)) {
-    $prefill = json_decode(file_get_contents($edit_file), true) ?? [];
+function make_init(string $n): string {
+  $i = '';
+  foreach (array_slice(preg_split('/\s+/', trim($n)), 0, 2) as $w)
+    if ($w !== '') $i .= strtoupper(substr($w, 0, 1));
+  return $i ?: 'B';
+}
+function cslug(string $s, string $fb = ''): string {
+  $s = trim(preg_replace('/-+/', '-', preg_replace('/[^a-z0-9\-]/', '-', strtolower(trim($s)))), '-');
+  if ($s === '' && $fb !== '') $s = cslug($fb);
+  return $s ?: 'business-' . time();
+}
+function uslug(PDO $p, string $base): string {
+  $slug = $base; $i = 1;
+  while (true) {
+    $st = $p->prepare("SELECT id FROM businesses WHERE slug=?");
+    $st->execute([$slug]);
+    if (!$st->fetch()) return $slug;
+    $slug = $base . '-' . $i++;
   }
 }
-
-function pre($key, $default = '') {
-  global $prefill;
-  $val = $prefill[$key] ?? $default;
-  return htmlspecialchars((string)$val, ENT_QUOTES);
+function save_logo(array $f, string $slug): ?string {
+  if (empty($f['tmp_name']) || !is_uploaded_file($f['tmp_name'])) return null;
+  $ext = strtolower(pathinfo($f['name'], PATHINFO_EXTENSION));
+  if (!in_array($ext, ['jpg','jpeg','png','webp'])) return null;
+  $dir = dirname(__DIR__) . '/uploads/' . $slug . '/';
+  if (!is_dir($dir)) mkdir($dir, 0755, true);
+  $dest = $dir . 'logo.' . $ext;
+  return move_uploaded_file($f['tmp_name'], $dest) ? 'uploads/' . $slug . '/logo.' . $ext : null;
+}
+function save_avatar(array $f, string $slug): ?string {
+  if (empty($f['tmp_name']) || !is_uploaded_file($f['tmp_name'])) return null;
+  $ext = strtolower(pathinfo($f['name'], PATHINFO_EXTENSION));
+  if (!in_array($ext, ['jpg','jpeg','png','webp'])) return null;
+  $dir = dirname(__DIR__) . '/uploads/' . $slug . '/';
+  if (!is_dir($dir)) mkdir($dir, 0755, true);
+  $dest = $dir . 'avatar.' . $ext;
+  return move_uploaded_file($f['tmp_name'], $dest) ? 'uploads/' . $slug . '/avatar.' . $ext : null;
+}
+function ins_avail(PDO $p, int $id): void {
+  $days = [
+    ['Dimanche','Sunday',0,0,null,null],
+    ['Lundi','Monday',1,1,'08:00:00','18:00:00'],
+    ['Mardi','Tuesday',2,1,'08:00:00','18:00:00'],
+    ['Mercredi','Wednesday',3,1,'08:00:00','18:00:00'],
+    ['Jeudi','Thursday',4,1,'08:00:00','18:00:00'],
+    ['Vendredi','Friday',5,1,'08:00:00','19:00:00'],
+    ['Samedi','Saturday',6,1,'09:00:00','17:00:00'],
+  ];
+  $st = $p->prepare("INSERT INTO availability (business_id,day_name,day_en,day_index,is_open,open_time,close_time) VALUES (?,?,?,?,?,?,?)");
+  foreach ($days as $d) $st->execute([$id, ...$d]);
+}
+function tlabel(string $v, string $o = ''): string {
+  return [
+    'salon'      => 'Salon de beauté', 'restaurant' => 'Restaurant',
+    'hotel'      => 'Hôtellerie',      'medical'    => 'Clinique / Médical',
+    'barber'     => 'Barbier',         'fitness'    => 'Sport & Fitness',
+    'photo'      => 'Photographie',    'law'        => 'Avocat / Cabinet',
+    'coach'      => 'Coach',           'other'      => trim($o) ?: 'Autre',
+  ][$v] ?? $v;
 }
 
-/* ── HANDLE FORM SUBMISSION ───────────────────────────────
-   Quand l'admin clique "Créer le compte" ou "Enregistrer"
-──────────────────────────────────────────────────────────── */
+/* ── Sauvegarde du formulaire ── */
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['form_submitted'])) {
+  try {
+    $pdo->beginTransaction();
 
-  /* Slug : on nettoie le sous-domaine entré par l'admin */
-  $slug = strtolower(trim($_POST['subdomain'] ?? ''));
-  $slug = preg_replace('/[^a-z0-9\-]/', '-', $slug);
-  $slug = trim($slug, '-');
-  if (empty($slug)) $slug = 'business-' . time();
+    $name = trim($_POST['business_name'] ?? '');
+    if ($name === '') throw new Exception('Le nom du business est obligatoire.');
 
-  /* Initiales à partir du nom */
-  $name     = trim($_POST['business_name'] ?? '');
-  $words    = explode(' ', $name);
-  $initials = '';
-  foreach (array_slice($words, 0, 2) as $w) {
-    $initials .= mb_strtoupper(mb_substr($w, 0, 1));
-  }
+    $slug = uslug($pdo, cslug($_POST['subdomain'] ?? '', $name));
+    $tc   = $_POST['primary_color'] ?? '#C9A84C';
+    $tbg  = $theme_bg_map[$tc] ?? '#FFF9EE';
+    $logo = save_logo($_FILES['logo'] ?? [], $slug);
+    $avatar = save_avatar($_FILES['avatar_photo'] ?? [], $slug);
+    $bs   = $_POST['booking_style'] ?? 'individual';
+    $emp  = max(1, (int)($_POST['employee_count'] ?? 1));
+    $slot = (int)($_POST['slot_duration_' . $bs] ?? 45);
+    $wa_owner = preg_replace('/\D/', '', $_POST['owner_whatsapp'] ?? '');
+    $pwd  = trim($_POST['temp_password'] ?? '');
 
-  /* Couleur thème et fond correspondant */
-  $theme_color = $_POST['primary_color'] ?? '#D4447A';
-  $theme_bg    = $theme_bg_map[$theme_color] ?? '#FFF0F8';
+    $pdo->prepare("INSERT INTO businesses
+      (slug,name,initials,type,description,city,neighborhood,whatsapp,logo,avatar_photo,
+       theme_color,theme_bg,primary_color,secondary_color,button_color,
+       text_color,background_color,border_color,navbar_style,footer_style,
+       show_biz_logo,show_lt_logo,lt_footer_only,language,booking_style,
+       employee_count,slot_duration,show_prices,show_connexion_btn,
+       svc_display_style,gal_display_mode,gal_max_photos,
+       about_position,global_font,global_font_size,btn_style,
+       bg_texture,plan,status,internal_notes)
+      VALUES
+      (:slug,:name,:init,:type,:desc,:city,:qtr,:wa,:logo,:avatar,
+       :tc,:tbg,:pc,:sc,:bc,:txtc,:bgc,:bdc,:ns,:fs,
+       :sbl,:sll,:lfo,:lang,:bs,:emp,:slot,:sp,:scb,
+       :sds,:gdm,:gmp,
+       :apos,:gfont,:gfsz,:btnst,
+       :bgtex,:plan,'new',:notes)")
+    ->execute([
+      ':slug'  => $slug, ':name' => $name, ':init' => make_init($name),
+      ':type'  => tlabel($_POST['business_type'] ?? 'salon', $_POST['other_type'] ?? ''),
+      ':desc'  => trim($_POST['description'] ?? ''),
+      ':city'  => trim($_POST['city'] ?? ''), ':qtr' => trim($_POST['quarter'] ?? ''),
+      ':wa'    => preg_replace('/\D/', '', $_POST['whatsapp'] ?? ''),
+      ':logo'  => $logo, ':avatar' => $avatar,
+      ':tc'    => $tc, ':tbg' => $tbg, ':pc' => $tc,
+      ':sc'    => $_POST['secondary_color']  ?? '#0A0A0A',
+      ':bc'    => $_POST['button_color']     ?? $tc,
+      ':txtc'  => $_POST['text_color']       ?? '#222222',
+      ':bgc'   => $_POST['background_color'] ?? '#ffffff',
+      ':bdc'   => $_POST['border_color']     ?? '#e5e7eb',
+      ':ns'    => $_POST['navbar_style']     ?? 'light',
+      ':fs'    => $_POST['footer_style']     ?? 'minimal',
+      ':sbl'   => isset($_POST['show_business_logo'])        ? 1 : 0,
+      ':sll'   => isset($_POST['show_liontech_logo'])        ? 1 : 0,
+      ':lfo'   => isset($_POST['show_liontech_footer_only']) ? 1 : 0,
+      ':lang'  => $_POST['site_language']  ?? 'fr',
+      ':bs'    => $bs, ':emp' => $emp, ':slot' => $slot,
+      ':sp'    => isset($_POST['show_prices'])        ? 1 : 0,
+      ':scb'   => isset($_POST['show_connexion_btn']) ? 1 : 0,
+      ':sds'   => $_POST['svc_display_style']  ?? 'list',
+      ':gdm'   => $_POST['gal_display_mode']   ?? 'grid',
+      ':gmp'   => (int)($_POST['gal_max_photos'] ?? 9),
+      ':apos'  => $_POST['about_position']  ?? 'after',
+      ':gfont' => $_POST['global_font']     ?? 'system-ui',
+      ':gfsz'  => $_POST['global_font_size'] ?? '1rem',
+      ':btnst' => $_POST['btn_style']       ?? 'filled',
+      ':bgtex' => $_POST['bg_texture']      ?? 'none',
+      ':plan'  => $_POST['plan']            ?? 'basic',
+      ':notes' => trim($_POST['internal_notes'] ?? ''),
+    ]);
 
-  /* Services — l'admin peut en ajouter via clientLion plus tard
-     Pour l'instant on garde les services vides (remplis par le propriétaire) */
-  $services_existing = $prefill['services'] ?? [];
+    $bizId = (int)$pdo->lastInsertId();
 
-  /* Disponibilités — défaut 7 jours, propriétaire peut modifier */
-  $availability_existing = $prefill['availability'] ?? [
-    ['day'=>'Lundi',    'day_en'=>'Monday',    'open'=>true,  'start'=>'08:00','end'=>'18:00'],
-    ['day'=>'Mardi',    'day_en'=>'Tuesday',   'open'=>true,  'start'=>'08:00','end'=>'18:00'],
-    ['day'=>'Mercredi', 'day_en'=>'Wednesday', 'open'=>true,  'start'=>'08:00','end'=>'18:00'],
-    ['day'=>'Jeudi',    'day_en'=>'Thursday',  'open'=>true,  'start'=>'08:00','end'=>'18:00'],
-    ['day'=>'Vendredi', 'day_en'=>'Friday',    'open'=>true,  'start'=>'08:00','end'=>'19:00'],
-    ['day'=>'Samedi',   'day_en'=>'Saturday',  'open'=>true,  'start'=>'09:00','end'=>'17:00'],
-    ['day'=>'Dimanche', 'day_en'=>'Sunday',    'open'=>false, 'start'=>'',     'end'=>''],
-  ];
-
-  /* Handle logo upload */
-  $logo_path = $prefill['logo'] ?? '';
-  if (!empty($_FILES['logo']['tmp_name'])) {
-    $upload_dir = dirname(__DIR__) . '/uploads/' . $slug . '/';
-    if (!is_dir($upload_dir)) mkdir($upload_dir, 0755, true);
-    $ext      = pathinfo($_FILES['logo']['name'], PATHINFO_EXTENSION);
-    $filename = 'logo.' . $ext;
-    if (move_uploaded_file($_FILES['logo']['tmp_name'], $upload_dir . $filename)) {
-      $logo_path = 'uploads/' . $slug . '/' . $filename;
+    /* Créer le compte propriétaire avec WhatsApp comme identifiant */
+    if ($wa_owner && $pwd) {
+      $pdo->prepare("INSERT INTO owners (business_id, whatsapp, password_hash, name) VALUES (?,?,?,?)")
+          ->execute([$bizId, $wa_owner, password_hash($pwd, PASSWORD_DEFAULT), $name]);
     }
-  }
 
-  /* Assemble business data */
-  $business = [
-    'name'             => $name,
-    'slug'             => $slug,
-    'initials'         => $initials,
-    'type'             => trim($_POST['business_type_label'] ?? $_POST['business_type'] ?? ''),
-    'description'      => trim($_POST['description'] ?? ''),
-    'city'             => trim($_POST['city'] ?? '') . (trim($_POST['quarter'] ?? '') ? ', ' . trim($_POST['quarter']) : ''),
-    'whatsapp'         => '+237' . preg_replace('/\D/', '', $_POST['whatsapp'] ?? ''),
-    'rating'           => (float)($prefill['rating'] ?? 0),
-    'review_count'     => (int)($prefill['review_count'] ?? 0),
-    'logo'             => $logo_path,
-    'cover_photo'      => $prefill['cover_photo'] ?? '',
-    'gallery'          => $prefill['gallery'] ?? [],
+    ins_avail($pdo, $bizId);
+    $pdo->commit();
 
-    /* Thème */
-    'theme_color'      => $theme_color,
-    'theme_bg'         => $theme_bg,
-    'theme_name'       => $_POST['theme_preset'] ?? 'Élégant',
-    'navbar_style'     => $_POST['navbar_style'] ?? 'light',
-    'footer_style'     => $_POST['footer_style'] ?? 'minimal',
-    'show_biz_logo'    => isset($_POST['show_business_logo']),
-    'show_lt_logo'     => isset($_POST['show_liontech_logo']),
-    'lt_footer_only'   => isset($_POST['show_liontech_footer_only']),
-
-    /* Couleurs */
-    'primary_color'    => $_POST['primary_color']    ?? '#D4447A',
-    'secondary_color'  => $_POST['secondary_color']  ?? '#0A0A0A',
-    'button_color'     => $_POST['button_color']     ?? '#D4447A',
-    'text_color'       => $_POST['text_color']       ?? '#222222',
-    'background_color' => $_POST['background_color'] ?? '#ffffff',
-    'border_color'     => $_POST['border_color']     ?? '#e5e7eb',
-
-    /* Langue */
-    'language'         => $_POST['site_language'] ?? 'fr',
-
-    /* Services — remplis par le propriétaire dans clientLion */
-    'show_prices'      => isset($_POST['show_prices']),
-    'services'         => $services_existing,
-
-    /* Disponibilités — modifiables par le propriétaire dans clientLion */
-    'availability'     => $availability_existing,
-
-    /* Compte */
-    'owner_email'      => trim($_POST['login_email'] ?? ''),
-    'owner_password'   => trim($_POST['temp_password'] ?? ''),
-    'plan'             => $_POST['plan'] ?? 'basic',
-    'booking_style'    => $_POST['booking_style'] ?? 'individual',
-    'internal_notes'   => trim($_POST['internal_notes'] ?? ''),
-    'created_at'       => $prefill['created_at'] ?? date('Y-m-d H:i:s'),
-    'updated_at'       => date('Y-m-d H:i:s'),
-  ];
-
-  /* Save to JSON file */
-  $json_file = $data_dir . '/' . $slug . '.json';
-  $written   = file_put_contents($json_file, json_encode($business, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE));
-
-  if ($written !== false) {
     $save_success = true;
     $saved_slug   = $slug;
-    $prefill      = $business; /* update prefill for display */
-  } else {
-    $save_error = 'Erreur : impossible d\'écrire dans le dossier data/. Vérifiez les permissions XAMPP.';
+    $prefill = ['name' => $name, 'slug' => $slug, 'owner_whatsapp' => $wa_owner, 'owner_password' => $pwd];
+
+  } catch (Throwable $e) {
+    if ($pdo->inTransaction()) $pdo->rollBack();
+    $save_error = $e->getMessage();
   }
 }
 ?>
@@ -176,686 +178,1114 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['form_submitted'])) {
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title><?= $edit_mode ? 'Modifier un business' : 'Ajouter un business' ?> — LionRDV</title>
+  <title>Ajouter un business — LionRDV</title>
   <link rel="stylesheet" href="../sidebar.css">
   <link rel="stylesheet" href="AjouterBussiness.css">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
 </head>
 <body>
 <div class="app-layout">
+  <?php include __DIR__ . '/../sidebar.php'; ?>
 
-  <?php include '../sidebar.php'; ?>
+  <main class="ab-main">
 
-  <main class="addbiz-main">
-
-    <!-- ── TOP BAR ── -->
-    <header class="addbiz-topbar">
-      <div class="addbiz-topbar-left">
-        <h1><?= $edit_mode ? 'Modifier le business' : 'Ajouter un business' ?></h1>
-        <p><?= $edit_mode
-          ? 'Modification de <strong>' . htmlspecialchars($prefill['name'] ?? $edit_slug) . '</strong>'
-          : 'Créer un nouveau client sur la plateforme LionRDV' ?></p>
+    <!-- TOP BAR -->
+    <header class="ab-topbar">
+      <div class="ab-topbar-left">
+        <div class="ab-brand">
+          <span class="ab-lion">🦁</span>
+          <span class="ab-brand-name">LionRDV</span>
+          <span class="ab-brand-badge">by LionTech</span>
+        </div>
+        <p class="ab-topbar-sub">Créez la page du commerce en quelques minutes</p>
       </div>
-      <div class="addbiz-topbar-actions">
-        <a href="../RSVAdmin.php" class="btn-outline-dark">
-          <i class="fa-solid fa-arrow-left"></i>
-          Retour
+      <div class="ab-topbar-actions">
+        <a href="../RSVAdmin.php" class="ab-btn-back">
+          <i class="fa-solid fa-arrow-left"></i> Retour
         </a>
-        <button type="submit" form="biz-form" class="btn-gold-dark" id="create-btn">
-          <i class="fa-solid fa-<?= $edit_mode ? 'floppy-disk' : 'check' ?>"></i>
-          <?= $edit_mode ? 'Enregistrer' : 'Créer le compte' ?>
+        <button type="submit" form="biz-form" class="ab-btn-create">
+          <i class="fa-solid fa-check"></i> Créer le compte client
         </button>
       </div>
     </header>
 
     <?php if ($save_error): ?>
-    <div style="margin:16px 28px;padding:12px 16px;background:#FEF2F2;border:1px solid #FECACA;border-radius:10px;color:#DC2626;font-size:13px;">
-      <i class="fa-solid fa-circle-exclamation"></i> <?= htmlspecialchars($save_error) ?>
+    <div class="ab-error-bar">
+      <i class="fa-solid fa-circle-exclamation"></i> <?= h($save_error) ?>
     </div>
     <?php endif; ?>
 
-    <!-- ══════════════════════════════════════
-         MAIN FORM — enctype for file upload
-    ══════════════════════════════════════ -->
-    <form id="biz-form"
-          method="POST"
-          action="AjouterBussiness.php<?= $edit_mode ? '?edit=' . urlencode($edit_slug) : '' ?>"
-          enctype="multipart/form-data">
+    <!-- BUILDER LAYOUT: 40% form | 60% preview -->
+    <div class="ab-builder">
 
-      <input type="hidden" name="form_submitted" value="1">
+      <!-- ═══════ FORM COLUMN ═══════ -->
+      <div class="ab-form-col" id="ab-form-col">
+        <form id="biz-form" method="POST" enctype="multipart/form-data">
+          <input type="hidden" name="form_submitted" value="1">
 
-      <div class="addbiz-content">
-        <section class="addbiz-form-panel">
-
-          <!-- ── SECTION 1 : Informations ── -->
-          <div class="form-card">
-            <div class="form-card-header">
-              <div class="step-badge">1</div>
+          <!-- ── S1: Informations ── -->
+          <div class="ab-card ab-sec" id="sec-info">
+            <div class="ab-card-head">
+              <div class="ab-step">1</div>
               <div>
-                <h2>Informations du business</h2>
-                <p>Nom, lien, contact, localisation, description et logo</p>
+                <h2 class="ab-card-title">Informations</h2>
+                <p class="ab-card-sub">Nom, téléphone et adresse</p>
               </div>
             </div>
-            <div class="form-grid">
-
-              <div class="form-group">
-                <label for="business_name">Nom du business *</label>
-                <input type="text" id="business_name" name="business_name"
-                       placeholder="Ex: Nora Beauty"
-                       value="<?= pre('name') ?>"
-                       required>
+            <div class="ab-grid">
+              <div class="ab-field">
+                <label class="ab-label">Nom du commerce *</label>
+                <input class="ab-input" type="text" id="inp-name" name="business_name" placeholder="Ex: Barbershop Elite" required oninput="syncPreview()">
               </div>
-
-              <div class="form-group">
-                <label for="subdomain">Sous-domaine *</label>
-                <div class="input-prefix">
+              <div class="ab-field">
+                <label class="ab-label">Sous-domaine *</label>
+                <div class="ab-prefix">
                   <span>lionrdv.cm/</span>
-                  <input type="text" id="subdomain" name="subdomain"
-                         placeholder="nora-beauty"
-                         value="<?= pre('slug') ?>"
-                         required>
+                  <input type="text" name="subdomain" placeholder="barbershop-elite" required oninput="syncPreview()">
                 </div>
               </div>
-
-              <div class="form-group">
-                <label for="whatsapp">WhatsApp *</label>
-                <div class="input-prefix">
-                  <span>+237</span>
-                  <input type="text" id="whatsapp" name="whatsapp"
-                         placeholder="6XX XXX XXX"
-                         value="<?= pre('whatsapp') ?>">
-                </div>
+              <div class="ab-field">
+                <label class="ab-label">WhatsApp du commerce</label>
+                <div class="ab-prefix"><span>+237</span><input type="tel" id="inp-wa" name="whatsapp" placeholder="6XX XXX XXX"></div>
               </div>
-
-              <div class="form-group">
-                <label for="owner_email">Email propriétaire</label>
-                <input type="email" id="owner_email" name="owner_email"
-                       placeholder="owner@email.com"
-                       value="<?= pre('owner_email') ?>">
+              <div class="ab-field">
+                <label class="ab-label">Ville</label>
+                <input class="ab-input" type="text" id="inp-city" name="city" placeholder="Douala" oninput="syncPreview()">
               </div>
-
-              <div class="form-group">
-                <label for="city">Ville</label>
-                <input type="text" id="city" name="city"
-                       placeholder="Yaoundé"
-                       value="<?= pre('city') ?>">
+              <div class="ab-field">
+                <label class="ab-label">Quartier</label>
+                <input class="ab-input" type="text" name="quarter" placeholder="Akwa">
               </div>
-
-              <div class="form-group">
-                <label for="quarter">Quartier</label>
-                <input type="text" id="quarter" name="quarter"
-                       placeholder="Bastos"
-                       value="<?= pre('quarter') ?>">
+              <div class="ab-field ab-field-full">
+                <label class="ab-label">Description (À propos)</label>
+                <textarea class="ab-textarea" id="inp-about" name="description" rows="3" placeholder="Votre barbier de confiance depuis 2018..." oninput="syncPreview()"></textarea>
               </div>
-
-              <div class="form-group full-width">
-                <label for="description">Description courte</label>
-                <textarea id="description" name="description" rows="4"
-                          placeholder="Petite description visible sur la page de réservation..."><?= pre('description') ?></textarea>
-              </div>
-
-              <div class="form-group full-width">
-                <label for="logo">Logo du business</label>
-                <?php if (!empty($prefill['logo'])): ?>
-                  <div style="margin-bottom:8px;display:flex;align-items:center;gap:10px;">
-                    <img src="../<?= htmlspecialchars($prefill['logo']) ?>"
-                         style="width:50px;height:50px;border-radius:10px;object-fit:cover;border:1px solid #E2DDD4;">
-                    <span style="font-size:11px;color:#7A7570;">Logo actuel — upload pour remplacer</span>
-                  </div>
-                <?php endif; ?>
-                <input type="file" id="logo" name="logo"
-                       accept="image/*" onchange="previewLogo(this)">
-              </div>
-
-              <!-- CONNEXION BOX -->
-              <div class="form-group full-width">
-                <label>Accès propriétaire — Connexion</label>
-                <div class="owner-access-box">
-                  <div class="owner-access-info">
-                    <div class="owner-access-icon">
-                      <i class="fa-solid fa-lock"></i>
-                    </div>
-                    <div>
-                      <div class="owner-access-title">Connexion espace propriétaire</div>
-                      <div class="owner-access-sub">Ce bouton apparaîtra sur la page du business après création</div>
-                    </div>
-                  </div>
-                  <a href="/LionRDV/Clien%20de%20LionTech/ClientLion.php"
-                     target="_blank"
-                     class="owner-connexion-btn">
-                    <i class="fa-solid fa-right-to-bracket"></i>
-                    Connexion
-                  </a>
-                </div>
-              </div>
-
             </div>
           </div>
 
-          <!-- ── SECTION 2 : Type de business ── -->
-          <div class="form-card">
-            <div class="form-card-header">
-              <div class="step-badge">2</div>
+          <!-- ── S2: Langue ── -->
+          <div class="ab-card ab-sec" id="sec-lang">
+            <div class="ab-card-head">
+              <div class="ab-step">2</div>
               <div>
-                <h2>Type de business</h2>
-                <p>Sélectionnez le type pour personnaliser la réservation</p>
+                <h2 class="ab-card-title">Langue du site</h2>
+                <p class="ab-card-sub">Français, Anglais ou Bilingue</p>
+              </div>
+            </div>
+            <div class="ab-lang-grid">
+              <label class="ab-lang-opt ab-lang-on">
+                <input type="radio" name="site_language" value="fr" checked>
+                <span class="ab-lang-flag">🇫🇷</span>
+                <span class="ab-lang-nm">Français</span>
+              </label>
+              <label class="ab-lang-opt">
+                <input type="radio" name="site_language" value="en">
+                <span class="ab-lang-flag">🇬🇧</span>
+                <span class="ab-lang-nm">English</span>
+              </label>
+              <label class="ab-lang-opt">
+                <input type="radio" name="site_language" value="bilingual">
+                <span class="ab-lang-flag">🌐</span>
+                <span class="ab-lang-nm">Bilingue (FR)</span>
+              </label>
+            </div>
+          </div>
+
+          <!-- ── S3: Couleur du thème ── -->
+          <div class="ab-card ab-sec" id="sec-colors">
+            <div class="ab-card-head">
+              <div class="ab-step">3</div>
+              <div>
+                <h2 class="ab-card-title">Couleur du thème</h2>
+                <p class="ab-card-sub">Couleur principale de la page</p>
+              </div>
+            </div>
+            <!-- Palette prédéfinie -->
+            <div class="ab-clr-dots" id="ab-clr-dots">
+              <button type="button" class="ab-clr-dot" style="background:#9B59B6" data-color="#9B59B6" onclick="setColor('#9B59B6',this)"></button>
+              <button type="button" class="ab-clr-dot ab-clr-on" style="background:#C9A84C" data-color="#C9A84C" onclick="setColor('#C9A84C',this)"></button>
+              <button type="button" class="ab-clr-dot" style="background:#3498DB" data-color="#3498DB" onclick="setColor('#3498DB',this)"></button>
+              <button type="button" class="ab-clr-dot" style="background:#1ABC9C" data-color="#1ABC9C" onclick="setColor('#1ABC9C',this)"></button>
+              <button type="button" class="ab-clr-dot" style="background:#E74C3C" data-color="#E74C3C" onclick="setColor('#E74C3C',this)"></button>
+              <button type="button" class="ab-clr-dot" style="background:#E91E8C" data-color="#E91E8C" onclick="setColor('#E91E8C',this)"></button>
+              <button type="button" class="ab-clr-dot" style="background:#E67E22" data-color="#E67E22" onclick="setColor('#E67E22',this)"></button>
+              <button type="button" class="ab-clr-dot" style="background:#607D8B" data-color="#607D8B" onclick="setColor('#607D8B',this)"></button>
+              <button type="button" class="ab-clr-dot" style="background:#1A237E" data-color="#1A237E" onclick="setColor('#1A237E',this)"></button>
+              <button type="button" class="ab-clr-dot" style="background:#009688" data-color="#009688" onclick="setColor('#009688',this)"></button>
+              <button type="button" class="ab-clr-dot" style="background:#7B1FA2" data-color="#7B1FA2" onclick="setColor('#7B1FA2',this)"></button>
+            </div>
+            <!-- Couleurs sauvegardées -->
+            <div class="ab-label" style="margin-top:.75rem;">Mes couleurs sauvegardées</div>
+            <div class="ab-saved-colors" id="ab-saved-colors">
+              <span class="ab-saved-empty">Aucune couleur sauvegardée</span>
+            </div>
+            <!-- Ajout couleur personnalisée -->
+            <div class="ab-clr-add">
+              <input type="color" id="ab-clr-picker" value="#C9A84C" oninput="document.getElementById('ab-clr-hex').value=this.value">
+              <input class="ab-clr-hex" id="ab-clr-hex" value="#C9A84C" maxlength="7" oninput="document.getElementById('ab-clr-picker').value=this.value">
+              <button type="button" class="ab-clr-save-btn" onclick="saveColor()">+ Sauvegarder</button>
+            </div>
+            <input type="hidden" id="primary_color" name="primary_color" value="#C9A84C">
+            <p class="ab-hint">Double-cliquez sur une couleur sauvegardée pour la supprimer</p>
+          </div>
+
+          <!-- ── S4: Logo, Couverture & Navbar ── -->
+          <div class="ab-card ab-sec" id="sec-cover">
+            <div class="ab-card-head">
+              <div class="ab-step">4</div>
+              <div>
+                <h2 class="ab-card-title">Couverture — Overlay & Navbar</h2>
+                <p class="ab-card-sub">Logo, photo, avatar, éléments visibles</p>
+              </div>
+            </div>
+            <div class="ab-grid">
+              <!-- Logo -->
+              <div class="ab-field">
+                <label class="ab-label">Logo navbar</label>
+                <div class="ab-upload" onclick="document.getElementById('logo-f').click()">
+                  <div class="ab-upload-thumb" id="logo-thumb">
+                    <img id="logo-img" alt="">
+                    <i class="fa-regular fa-image ab-upload-icon"></i>
+                  </div>
+                  <div>
+                    <div class="ab-upload-title">Uploader le logo</div>
+                    <div class="ab-upload-sub">JPG, PNG, WEBP</div>
+                  </div>
+                </div>
+                <input type="file" id="logo-f" name="logo" accept="image/*" onchange="handleLogo(this)">
+              </div>
+              <!-- Cover -->
+              <div class="ab-field">
+                <label class="ab-label">Photo de couverture</label>
+                <div class="ab-upload" onclick="document.getElementById('cover-f').click()">
+                  <div class="ab-upload-thumb" id="cover-thumb">
+                    <img id="cover-img" alt="">
+                    <i class="fa-regular fa-image ab-upload-icon"></i>
+                  </div>
+                  <div>
+                    <div class="ab-upload-title">Photo de couverture</div>
+                    <div class="ab-upload-sub">Si vide → couleur principale</div>
+                  </div>
+                </div>
+                <input type="file" id="cover-f" name="cover_photo" accept="image/*" onchange="handleCover(this)">
               </div>
             </div>
 
-            <div class="business-type-grid">
-              <label class="type-option active"><input type="radio" name="business_type" value="salon" checked><span>💅 Salon de beauté</span></label>
-              <label class="type-option"><input type="radio" name="business_type" value="restaurant"><span>🍽️ Restaurant</span></label>
-              <label class="type-option"><input type="radio" name="business_type" value="hotel"><span>🏨 Hôtellerie</span></label>
-              <label class="type-option"><input type="radio" name="business_type" value="medical"><span>🩺 Clinique / Médical</span></label>
-              <label class="type-option"><input type="radio" name="business_type" value="barber"><span>✂️ Barbier</span></label>
-              <label class="type-option"><input type="radio" name="business_type" value="fitness"><span>🏋️ Sport & fitness</span></label>
-              <label class="type-option"><input type="radio" name="business_type" value="photo"><span>📸 Photographie</span></label>
-              <label class="type-option"><input type="radio" name="business_type" value="law"><span>⚖️ Avocat / Cabinet</span></label>
-              <label class="type-option"><input type="radio" name="business_type" value="coach"><span>🎯 Coach</span></label>
-              <label class="type-option"><input type="radio" name="business_type" value="other"><span>📝 Autre</span></label>
+            <!-- Avatar propriétaire -->
+            <div class="ab-toggle-row">
+              <span class="ab-toggle-lbl">Avatar propriétaire sur la couverture</span>
+              <label class="ab-toggle">
+                <input type="checkbox" id="tog-avatar" name="show_avatar" onchange="toggleAvatar(this)">
+                <span class="ab-toggle-knob"></span>
+              </label>
+            </div>
+            <div id="avatar-wrap" style="display:none;margin-top:.5rem;">
+              <div class="ab-upload" onclick="document.getElementById('avatar-f').click()">
+                <div class="ab-upload-thumb ab-upload-round" id="avatar-thumb">
+                  <img id="avatar-img" alt="">
+                  <i class="fa-solid fa-user ab-upload-icon"></i>
+                </div>
+                <div>
+                  <div class="ab-upload-title">Photo de profil propriétaire</div>
+                  <div class="ab-upload-sub">Petit rond en bas à droite de la couverture</div>
+                </div>
+              </div>
+              <input type="file" id="avatar-f" name="avatar_photo" accept="image/*" onchange="handleAvatar(this)">
             </div>
 
-            <!-- Hidden field to store the type label for saving -->
-            <input type="hidden" id="business_type_label" name="business_type_label" value="Salon de beauté">
+            <!-- Éléments overlay -->
+            <div class="ab-label" style="margin-top:.75rem;">Éléments visibles sur la couverture</div>
+            <?php
+            $overlayItems = [
+              ['Nom du commerce',    'ov_name'],
+              ['Type de commerce',   'ov_type'],
+              ['Adresse',            'ov_address'],
+              ['Contact WhatsApp',   'ov_whatsapp'],
+            ];
+            foreach ($overlayItems as [$lbl, $name]): ?>
+            <div class="ab-ov-item">
+              <span class="ab-ov-lbl"><?= $lbl ?></span>
+              <div class="ab-ov-pos">
+                <button type="button" class="ab-pos-btn ab-pos-on" data-field="<?= $name ?>" onclick="selPos(this,'centre')">Centre</button>
+                <button type="button" class="ab-pos-btn" data-field="<?= $name ?>" onclick="selPos(this,'bas')">Bas</button>
+                <button type="button" class="ab-pos-btn" data-field="<?= $name ?>" onclick="selPos(this,'masqué')">Masqué</button>
+              </div>
+              <input type="hidden" name="<?= $name ?>" value="centre">
+            </div>
+            <?php endforeach; ?>
 
-            <div class="type-services-box" id="typeServicesBox">
-              <label for="business_category_select">Catégories proposées</label>
-              <select id="business_category_select" name="business_category_select">
-                <option value="">-- Sélectionnez une catégorie --</option>
+            <!-- Navbar options -->
+            <div class="ab-label" style="margin-top:.75rem;">Navbar</div>
+            <div class="ab-grid">
+              <div class="ab-field">
+                <label class="ab-label">Style navbar</label>
+                <select class="ab-select" name="navbar_style" onchange="syncPreview()">
+                  <option value="light">Claire (fond blanc)</option>
+                  <option value="dark">Sombre</option>
+                  <option value="transparent">Transparente</option>
+                </select>
+              </div>
+            </div>
+            <div class="ab-toggle-row">
+              <span class="ab-toggle-lbl">Afficher le logo dans la navbar</span>
+              <label class="ab-toggle"><input type="checkbox" name="show_business_logo" checked onchange="syncPreview()"><span class="ab-toggle-knob"></span></label>
+            </div>
+            <div class="ab-toggle-row">
+              <span class="ab-toggle-lbl">Badge LionTech visible</span>
+              <label class="ab-toggle"><input type="checkbox" name="show_liontech_logo" checked onchange="syncPreview()"><span class="ab-toggle-knob"></span></label>
+            </div>
+            <!-- BOUTON CONNEXION -->
+            <div class="ab-toggle-row">
+              <span class="ab-toggle-lbl">Bouton Connexion dans la navbar</span>
+              <label class="ab-toggle"><input type="checkbox" id="tog-conn" name="show_connexion_btn" onchange="toggleConnBtn(this)"><span class="ab-toggle-knob"></span></label>
+            </div>
+          </div>
+
+          <!-- ── S5: Typographie globale ── -->
+          <div class="ab-card ab-sec" id="sec-typo">
+            <div class="ab-card-head">
+              <div class="ab-step">5</div>
+              <div>
+                <h2 class="ab-card-title">Typographie globale</h2>
+                <p class="ab-card-sub">Police, taille et couleur sur tout le site</p>
+              </div>
+            </div>
+            <!-- Polices prédéfinies -->
+            <div class="ab-label">Police principale</div>
+            <div class="ab-font-grid" id="ab-font-grid">
+              <button type="button" class="ab-font-opt ab-font-on" onclick="selFont(this,'system-ui')">
+                <span class="ab-font-sample" style="font-family:system-ui;">Aa</span>
+                <span class="ab-font-nm">Système</span>
+              </button>
+              <button type="button" class="ab-font-opt" onclick="selFont(this,'Georgia, serif')">
+                <span class="ab-font-sample" style="font-family:Georgia,serif;">Aa</span>
+                <span class="ab-font-nm">Serif</span>
+              </button>
+              <button type="button" class="ab-font-opt" onclick="selFont(this,'monospace')">
+                <span class="ab-font-sample" style="font-family:monospace;">Aa</span>
+                <span class="ab-font-nm">Mono</span>
+              </button>
+              <button type="button" class="ab-font-opt" onclick="selFont(this,'cursive')">
+                <span class="ab-font-sample" style="font-family:cursive;">Aa</span>
+                <span class="ab-font-nm">Script</span>
+              </button>
+            </div>
+            <input type="hidden" id="global_font" name="global_font" value="system-ui">
+            <!-- Police Google Fonts personnalisée -->
+            <button type="button" class="ab-add-custom" onclick="toggleCustomFont()">
+              <span class="ab-plus">+</span> Ajouter ma propre police (Google Fonts)
+            </button>
+            <div class="ab-custom-row" id="custom-font-row">
+              <input class="ab-input" id="custom-font-inp" placeholder="Ex: Playfair Display">
+              <button type="button" class="ab-btn-apply" onclick="applyCustomFont()">Appliquer</button>
+            </div>
+            <!-- Taille globale -->
+            <div class="ab-grid" style="margin-top:.75rem;">
+              <div class="ab-field">
+                <label class="ab-label">Taille du texte</label>
+                <div class="ab-size-grid" id="ab-size-grid">
+                  <button type="button" class="ab-sz" onclick="selSize(this,'0.85rem')">XS</button>
+                  <button type="button" class="ab-sz ab-sz-on" onclick="selSize(this,'1rem')">M</button>
+                  <button type="button" class="ab-sz" onclick="selSize(this,'1.125rem')">L</button>
+                  <button type="button" class="ab-sz" onclick="selSize(this,'1.25rem')">XL</button>
+                </div>
+                <input type="hidden" id="global_font_size" name="global_font_size" value="1rem">
+              </div>
+              <div class="ab-field">
+                <label class="ab-label">Poids du texte</label>
+                <div class="ab-size-grid" id="ab-weight-grid">
+                  <button type="button" class="ab-sz ab-sz-on" style="font-weight:400;" onclick="selWeight(this,'400')">Normal</button>
+                  <button type="button" class="ab-sz" style="font-weight:700;" onclick="selWeight(this,'700')">Gras</button>
+                </div>
+                <input type="hidden" id="global_font_weight" name="global_font_weight" value="400">
+              </div>
+            </div>
+            <!-- Couleurs de texte -->
+            <div class="ab-grid" style="margin-top:.75rem;">
+              <div class="ab-field">
+                <label class="ab-label">Couleur du texte</label>
+                <div class="ab-clr-row">
+                  <input type="color" class="ab-clr-sw" id="txt-clr" name="text_color" value="#111111" oninput="document.getElementById('txt-clr-hex').value=this.value;syncPreview()">
+                  <input class="ab-input ab-mono-inp" id="txt-clr-hex" value="#111111" maxlength="7" oninput="document.getElementById('txt-clr').value=this.value;syncPreview()">
+                </div>
+              </div>
+              <div class="ab-field">
+                <label class="ab-label">Couleur des titres</label>
+                <div class="ab-clr-row">
+                  <input type="color" class="ab-clr-sw" id="ttl-clr" name="title_color" value="#000000">
+                  <input class="ab-input ab-mono-inp" value="#000000" maxlength="7" oninput="document.getElementById('ttl-clr').value=this.value">
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- ── S6: Fond & Texture ── -->
+          <div class="ab-card ab-sec" id="sec-bg">
+            <div class="ab-card-head">
+              <div class="ab-step">6</div>
+              <div>
+                <h2 class="ab-card-title">Fond & texture</h2>
+                <p class="ab-card-sub">Rend chaque page unique</p>
+              </div>
+            </div>
+            <div class="ab-bg-grid" id="ab-bg-grid">
+              <button type="button" class="ab-bg-opt ab-bg-on" data-tex="none" data-bg="#ffffff" onclick="selBg(this)" style="background:#fff;border-color:#C9A84C;">
+                <span class="ab-bg-lbl">Uni</span>
+              </button>
+              <button type="button" class="ab-bg-opt" data-tex="dots" data-bg="#ffffff" onclick="selBg(this)"
+                style="background-image:radial-gradient(#bbb 1px,transparent 1px);background-size:6px 6px;background-color:#fff;">
+                <span class="ab-bg-lbl">Points</span>
+              </button>
+              <button type="button" class="ab-bg-opt" data-tex="lines" data-bg="#ffffff" onclick="selBg(this)"
+                style="background:repeating-linear-gradient(45deg,#e0e0e0 0,#e0e0e0 1px,#fff 0,#fff 9px);">
+                <span class="ab-bg-lbl">Lignes</span>
+              </button>
+              <button type="button" class="ab-bg-opt" data-tex="grid" data-bg="#ffffff" onclick="selBg(this)"
+                style="background:repeating-linear-gradient(0deg,#eee 0,#eee 1px,transparent 0,transparent 14px),repeating-linear-gradient(90deg,#eee 0,#eee 1px,transparent 0,transparent 14px);background-color:#fff;">
+                <span class="ab-bg-lbl">Grille</span>
+              </button>
+              <button type="button" class="ab-bg-opt" data-tex="none" data-bg="#FFF8EE" onclick="selBg(this)" style="background:#FFF8EE;">
+                <span class="ab-bg-lbl">Chaud</span>
+              </button>
+              <button type="button" class="ab-bg-opt" data-tex="none" data-bg="#F0F9FF" onclick="selBg(this)" style="background:#F0F9FF;">
+                <span class="ab-bg-lbl">Froid</span>
+              </button>
+              <button type="button" class="ab-bg-opt" data-tex="none" data-bg="#F0FDF4" onclick="selBg(this)" style="background:#F0FDF4;">
+                <span class="ab-bg-lbl">Menthe</span>
+              </button>
+              <button type="button" class="ab-bg-opt" data-tex="none" data-bg="#FDF4FF" onclick="selBg(this)" style="background:#FDF4FF;">
+                <span class="ab-bg-lbl">Lilas</span>
+              </button>
+            </div>
+            <input type="hidden" id="bg_texture" name="bg_texture" value="none">
+            <input type="hidden" id="background_color" name="background_color" value="#ffffff">
+            <!-- Fond CSS personnalisé -->
+            <button type="button" class="ab-add-custom" onclick="toggleCustomBg()">
+              <span class="ab-plus">+</span> Ajouter mon propre fond
+            </button>
+            <div class="ab-custom-row" id="custom-bg-row">
+              <input class="ab-input" id="custom-bg-inp" placeholder="Ex: #FFF3E0 ou repeating-linear-gradient(...)">
+              <button type="button" class="ab-btn-apply" onclick="applyCustomBg()">OK</button>
+            </div>
+            <!-- Footer -->
+            <div class="ab-field" style="margin-top:.75rem;">
+              <label class="ab-label">Style footer</label>
+              <select class="ab-select" name="footer_style" onchange="syncPreview()">
+                <option value="minimal">Minimal</option>
+                <option value="dark">Sombre</option>
+                <option value="branded">Coloré</option>
+                <option value="rich">Complet</option>
               </select>
             </div>
-
-            <div class="custom-type-box" id="customTypeBox" style="display:none;">
-              <label for="custom_business_name">Nom du type de business</label>
-              <input type="text" id="custom_business_name" name="custom_business_name"
-                     placeholder="Ex: Studio Podcast"
-                     value="<?= pre('custom_type') ?>">
-              <label for="custom_business_categories">Catégories / services à proposer</label>
-              <textarea id="custom_business_categories" name="custom_business_categories" rows="4"
-                        placeholder="Ex: Enregistrement, Mixage, Podcast vidéo, Location studio"></textarea>
-            </div>
-
-            <div class="form-group top-space">
-              <label for="other_type">Si autre, précisez</label>
-              <input type="text" id="other_type" name="other_type"
-                     placeholder="Ex: Studio Podcast">
-            </div>
           </div>
 
-          <!-- ── SECTION 3 : Style de réservation ── -->
-          <section class="form-section">
-            <div class="section-number">3</div>
-            <div class="section-content">
-              <h3>Style de réservation</h3>
-              <p>Choisissez comment ce business reçoit les réservations</p>
-              <div class="booking-style-grid">
-                <label class="booking-option active"><input type="radio" name="booking_style" value="individual" checked><span>👤 Individuelle</span></label>
-                <label class="booking-option"><input type="radio" name="booking_style" value="multiple"><span>👥 Multiple</span></label>
-                <label class="booking-option"><input type="radio" name="booking_style" value="employee"><span>🧑‍💼 Par employé</span></label>
-                <label class="booking-option"><input type="radio" name="booking_style" value="capacity"><span>🏷️ Par capacité</span></label>
-                <label class="booking-option"><input type="radio" name="booking_style" value="request"><span>📩 Sur demande</span></label>
-              </div>
-              <div id="bookingStyleFields" class="booking-style-fields">
-                <div class="booking-fields-group" data-style="individual">
-                  <label for="slot_duration_individual">Durée par créneau</label>
-                  <select id="slot_duration_individual" name="slot_duration_individual">
-                    <option value="15">15 min</option>
-                    <option value="30" selected>30 min</option>
-                    <option value="45">45 min</option>
-                    <option value="60">1 heure</option>
-                    <option value="90">1h30</option>
-                    <option value="120">2 heures</option>
-                  </select>
-                </div>
-                <div class="booking-fields-group" data-style="multiple" style="display:none;">
-                  <label for="max_parallel_bookings">Nombre maximum de réservations simultanées</label>
-                  <input type="number" id="max_parallel_bookings" name="max_parallel_bookings" min="1" value="3">
-                  <label for="slot_duration_multiple">Durée par créneau</label>
-                  <select id="slot_duration_multiple" name="slot_duration_multiple">
-                    <option value="15">15 min</option><option value="30" selected>30 min</option>
-                    <option value="45">45 min</option><option value="60">1 heure</option>
-                    <option value="90">1h30</option><option value="120">2 heures</option>
-                  </select>
-                </div>
-                <div class="booking-fields-group" data-style="employee" style="display:none;">
-                  <label for="employee_count">Nombre d'employés</label>
-                  <input type="number" id="employee_count" name="employee_count" min="1" value="3">
-                  <label for="client_choose_employee">Le client peut choisir l'employé ?</label>
-                  <select id="client_choose_employee" name="client_choose_employee">
-                    <option value="yes" selected>Oui</option><option value="no">Non</option>
-                  </select>
-                  <label for="slot_duration_employee">Durée par créneau</label>
-                  <select id="slot_duration_employee" name="slot_duration_employee">
-                    <option value="15">15 min</option><option value="30" selected>30 min</option>
-                    <option value="45">45 min</option><option value="60">1 heure</option>
-                    <option value="90">1h30</option><option value="120">2 heures</option>
-                  </select>
-                </div>
-                <div class="booking-fields-group" data-style="capacity" style="display:none;">
-                  <label for="max_capacity_per_slot">Capacité maximale par créneau</label>
-                  <input type="number" id="max_capacity_per_slot" name="max_capacity_per_slot" min="1" value="10">
-                  <label for="capacity_label">Type de capacité</label>
-                  <select id="capacity_label" name="capacity_label">
-                    <option value="places">Places</option><option value="tables">Tables</option>
-                    <option value="rooms">Chambres</option><option value="people">Personnes</option>
-                  </select>
-                </div>
-                <div class="booking-fields-group" data-style="request" style="display:none;">
-                  <label for="manual_validation">Validation des réservations</label>
-                  <select id="manual_validation" name="manual_validation">
-                    <option value="manual" selected>Validation manuelle</option>
-                    <option value="auto">Validation automatique</option>
-                  </select>
-                  <label for="request_note">Message d'information</label>
-                  <textarea id="request_note" name="request_note" rows="3"
-                            placeholder="Ex: Votre demande sera confirmée par le business après vérification."></textarea>
-                </div>
-              </div>
-            </div>
-          </section>
-
-          <!-- ── SECTION 4 : Thème, design & branding ── -->
-          <div class="form-card">
-            <div class="form-card-header">
-              <div class="step-badge">4</div>
+          <!-- ── S7: Horaires ── -->
+          <div class="ab-card ab-sec" id="sec-hours">
+            <div class="ab-card-head">
+              <div class="ab-step">7</div>
               <div>
-                <h2>Thème, design & branding</h2>
-                <p>Configurez le style visuel, les couleurs, les logos et la langue du site</p>
+                <h2 class="ab-card-title">Horaires d'ouverture</h2>
+                <p class="ab-card-sub">Par jour — modifiable par le propriétaire</p>
               </div>
             </div>
-
-            <div class="branding-block">
-              <h3>Thème prédéfini</h3>
-              <div class="theme-preset-grid">
-                <label class="theme-card active"><input type="radio" name="theme_preset" value="elegant" checked><div class="theme-preview elegant-preview"></div><span>✨ Élégant</span></label>
-                <label class="theme-card"><input type="radio" name="theme_preset" value="minimal"><div class="theme-preview minimal-preview"></div><span>🧼 Minimal</span></label>
-                <label class="theme-card"><input type="radio" name="theme_preset" value="luxe"><div class="theme-preview luxe-preview"></div><span>👑 Luxe</span></label>
-                <label class="theme-card"><input type="radio" name="theme_preset" value="modern"><div class="theme-preview modern-preview"></div><span>🚀 Moderne</span></label>
-                <label class="theme-card"><input type="radio" name="theme_preset" value="nature"><div class="theme-preview nature-preview"></div><span>🌿 Nature</span></label>
-                <label class="theme-card"><input type="radio" name="theme_preset" value="dark"><div class="theme-preview dark-preview"></div><span>🌙 Sombre</span></label>
-              </div>
+            <?php
+            $days = [
+              ['Lundi','monday','08:00','18:00',true],
+              ['Mardi','tuesday','08:00','18:00',true],
+              ['Mercredi','wednesday','08:00','18:00',true],
+              ['Jeudi','thursday','08:00','18:00',true],
+              ['Vendredi','friday','08:00','18:00',true],
+              ['Samedi','saturday','09:00','14:00',true],
+              ['Dimanche','sunday','','',false],
+            ];
+            foreach ($days as [$fr,$en,$open,$close,$isOpen]): ?>
+            <div class="ab-day-row" id="day-<?= $en ?>">
+              <label class="ab-day-tog">
+                <input type="checkbox" name="day_open_<?= $en ?>" <?= $isOpen ? 'checked' : '' ?> onchange="togDay('<?= $en ?>',this.checked)">
+                <span class="ab-day-tog-knob"></span>
+              </label>
+              <span class="ab-day-nm <?= !$isOpen ? 'ab-day-off' : '' ?>"><?= $fr ?></span>
+              <?php if ($isOpen): ?>
+              <input class="ab-time-inp" type="time" name="open_<?= $en ?>" value="<?= $open ?>">
+              <span class="ab-day-sep">–</span>
+              <input class="ab-time-inp" type="time" name="close_<?= $en ?>" value="<?= $close ?>">
+              <?php else: ?>
+              <span class="ab-day-ferme">Fermé</span>
+              <?php endif; ?>
             </div>
-
-            <div class="branding-block">
-              <h3>Couleurs</h3>
-              <div class="color-settings-grid">
-                <div class="color-field"><label for="primary_color">Couleur principale</label><div class="color-input-wrap"><input type="color" id="primary_color" name="primary_color" value="<?= pre('primary_color','#d4af37') ?>"><input type="text" id="primary_color_text" value="<?= pre('primary_color','#d4af37') ?>"></div></div>
-                <div class="color-field"><label for="secondary_color">Couleur secondaire</label><div class="color-input-wrap"><input type="color" id="secondary_color" name="secondary_color" value="<?= pre('secondary_color','#111111') ?>"><input type="text" id="secondary_color_text" value="<?= pre('secondary_color','#111111') ?>"></div></div>
-                <div class="color-field"><label for="button_color">Couleur des boutons</label><div class="color-input-wrap"><input type="color" id="button_color" name="button_color" value="<?= pre('button_color','#d4af37') ?>"><input type="text" id="button_color_text" value="<?= pre('button_color','#d4af37') ?>"></div></div>
-                <div class="color-field"><label for="text_color">Couleur du texte</label><div class="color-input-wrap"><input type="color" id="text_color" name="text_color" value="<?= pre('text_color','#222222') ?>"><input type="text" id="text_color_text" value="<?= pre('text_color','#222222') ?>"></div></div>
-                <div class="color-field"><label for="background_color">Couleur de fond</label><div class="color-input-wrap"><input type="color" id="background_color" name="background_color" value="<?= pre('background_color','#ffffff') ?>"><input type="text" id="background_color_text" value="<?= pre('background_color','#ffffff') ?>"></div></div>
-                <div class="color-field"><label for="border_color">Couleur des bordures</label><div class="color-input-wrap"><input type="color" id="border_color" name="border_color" value="<?= pre('border_color','#e5e7eb') ?>"><input type="text" id="border_color_text" value="<?= pre('border_color','#e5e7eb') ?>"></div></div>
-              </div>
+            <?php endforeach; ?>
+            <p class="ab-hint">Le propriétaire peut modifier les horaires depuis son espace</p>
+            <div class="ab-label" style="margin-top:.75rem;">Style d'affichage des horaires</div>
+            <div class="ab-hor-style-grid" id="ab-hor-grid">
+              <button type="button" class="ab-hor-opt ab-hor-on" onclick="selHorStyle(this,'list')">Liste</button>
+              <button type="button" class="ab-hor-opt" onclick="selHorStyle(this,'cards')">Cartes</button>
+              <button type="button" class="ab-hor-opt" onclick="selHorStyle(this,'badges')">Badges</button>
             </div>
-
-            <div class="branding-block">
-              <h3>Design du fond</h3>
-              <div class="design-grid">
-                <label class="design-option active"><input type="radio" name="background_style" value="solid" checked><span>⬜ Fond uni</span></label>
-                <label class="design-option"><input type="radio" name="background_style" value="gradient"><span>🌈 Dégradé</span></label>
-                <label class="design-option"><input type="radio" name="background_style" value="pattern"><span>🧩 Motif léger</span></label>
-                <label class="design-option"><input type="radio" name="background_style" value="texture"><span>🎨 Texture</span></label>
-                <label class="design-option"><input type="radio" name="background_style" value="image"><span>🖼️ Image</span></label>
-              </div>
-              <div id="backgroundUploadWrap" style="display:none;margin-top:12px;">
-                <label for="background_image">Image de fond</label>
-                <input type="file" id="background_image" name="background_image" accept="image/*">
-              </div>
-              <div id="customCssWrap" style="margin-top:12px;">
-                <label for="custom_css_design">CSS design personnalisé</label>
-                <textarea id="custom_css_design" name="custom_css_design" rows="4"
-                          placeholder="Ex: background: linear-gradient(135deg, #f8f1d4, #ffffff);"></textarea>
-              </div>
-            </div>
-
-            <div class="branding-block">
-              <h3>Navbar & footer</h3>
-              <div class="branding-layout-grid">
-                <div><label for="navbar_style">Style de navbar</label>
-                  <select id="navbar_style" name="navbar_style">
-                    <option value="light" <?= pre('navbar_style') === 'light' ? 'selected' : '' ?>>Claire</option>
-                    <option value="dark"  <?= pre('navbar_style') === 'dark'  ? 'selected' : '' ?>>Sombre</option>
-                    <option value="transparent" <?= pre('navbar_style') === 'transparent' ? 'selected' : '' ?>>Transparente</option>
-                    <option value="boxed" <?= pre('navbar_style') === 'boxed' ? 'selected' : '' ?>>Encadrée</option>
-                  </select>
-                </div>
-                <div><label for="footer_style">Style de footer</label>
-                  <select id="footer_style" name="footer_style">
-                    <option value="light"   <?= pre('footer_style') === 'light'   ? 'selected' : '' ?>>Clair</option>
-                    <option value="dark"    <?= pre('footer_style') === 'dark'    ? 'selected' : '' ?>>Sombre</option>
-                    <option value="minimal" <?= pre('footer_style') === 'minimal' ? 'selected' : '' ?>>Minimal</option>
-                    <option value="rich"    <?= pre('footer_style') === 'rich'    ? 'selected' : '' ?>>Complet</option>
-                  </select>
-                </div>
-                <div><label for="business_logo_position">Position logo business</label>
-                  <select id="business_logo_position" name="business_logo_position">
-                    <option value="left">Gauche</option><option value="center">Centre</option><option value="right">Droite</option>
-                  </select>
-                </div>
-                <div><label for="business_logo_size">Taille logo business</label>
-                  <select id="business_logo_size" name="business_logo_size">
-                    <option value="small">Petit</option><option value="medium" selected>Moyen</option><option value="large">Grand</option>
-                  </select>
-                </div>
-              </div>
-            </div>
-
-            <div class="branding-block">
-              <h3>Gestion des logos</h3>
-              <div class="toggle-grid">
-                <label class="toggle-item"><input type="checkbox" name="show_business_logo" <?= !empty($prefill['show_biz_logo']) ? 'checked' : 'checked' ?>><span>Afficher le logo du business</span></label>
-                <label class="toggle-item"><input type="checkbox" name="show_liontech_logo" <?= !empty($prefill['show_lt_logo']) ? 'checked' : 'checked' ?>><span>Afficher le logo LionTech</span></label>
-                <label class="toggle-item"><input type="checkbox" name="show_liontech_footer_only" <?= !empty($prefill['lt_footer_only']) ? 'checked' : '' ?>><span>Afficher LionTech uniquement dans le footer</span></label>
-                <label class="toggle-item"><input type="checkbox" name="show_prices" <?= !empty($prefill['show_prices']) ? 'checked' : 'checked' ?>><span>Afficher les prix des services</span></label>
-              </div>
-            </div>
-
-            <div class="branding-block">
-              <h3>Langue du site</h3>
-              <div class="language-grid">
-                <label class="language-option <?= (pre('language','fr') === 'fr') ? 'active' : '' ?>"><input type="radio" name="site_language" value="fr" <?= (pre('language','fr') === 'fr') ? 'checked' : '' ?>><span>🇫🇷 Français</span></label>
-                <label class="language-option <?= (pre('language') === 'en') ? 'active' : '' ?>"><input type="radio" name="site_language" value="en" <?= (pre('language') === 'en') ? 'checked' : '' ?>><span>🇬🇧 English</span></label>
-                <label class="language-option <?= (pre('language') === 'bilingual') ? 'active' : '' ?>"><input type="radio" name="site_language" value="bilingual" <?= (pre('language') === 'bilingual') ? 'checked' : '' ?>><span>🌍 Bilingue FR/EN</span></label>
-              </div>
-            </div>
+            <input type="hidden" id="hor_style" name="hor_style" value="list">
           </div>
 
-          <!-- ── SECTION 5 : Compte propriétaire ── -->
-          <div class="form-card">
-            <div class="form-card-header">
-              <div class="step-badge">5</div>
+          <!-- ── S8: Galerie ── -->
+          <div class="ab-card ab-sec" id="sec-gallery">
+            <div class="ab-card-head">
+              <div class="ab-step">8</div>
               <div>
-                <h2>Compte d'accès propriétaire</h2>
-                <p>Créer le compte utilisé par le propriétaire du business</p>
+                <h2 class="ab-card-title">Galerie Photos</h2>
+                <p class="ab-card-sub">Apparence et limites définies par l'admin</p>
               </div>
             </div>
-            <div class="form-grid">
-              <div class="form-group">
-                <label for="login_email">Email de connexion</label>
-                <input type="email" id="login_email" name="login_email"
-                       placeholder="nora@email.com"
-                       value="<?= pre('owner_email') ?>">
+            <div class="ab-field">
+              <label class="ab-label">Nombre max de photos (pour le propriétaire)</label>
+              <div class="ab-gal-max" id="ab-gal-max">
+                <button type="button" class="ab-gmb" onclick="selGalMax(this,3)">3</button>
+                <button type="button" class="ab-gmb" onclick="selGalMax(this,6)">6</button>
+                <button type="button" class="ab-gmb ab-gmb-on" onclick="selGalMax(this,9)">9</button>
+                <button type="button" class="ab-gmb" onclick="selGalMax(this,12)">12</button>
+                <button type="button" class="ab-gmb" onclick="selGalMax(this,24)">24</button>
               </div>
-              <div class="form-group">
-                <label for="temp_password">Mot de passe temporaire</label>
-                <div class="password-row">
-                  <input type="text" id="temp_password" name="temp_password"
-                         placeholder="Temporaire123"
-                         value="<?= pre('owner_password') ?>">
-                  <button type="button" class="small-generate-btn">Générer</button>
-                </div>
+              <input type="hidden" id="gal_max_photos" name="gal_max_photos" value="9">
+            </div>
+            <div class="ab-field">
+              <label class="ab-label">Mode d'affichage</label>
+              <div class="ab-gal-modes" id="ab-gal-modes">
+                <button type="button" class="ab-gm-opt ab-gm-on" onclick="selGalMode(this,'grid')">
+                  <span class="ab-gm-ico">▦</span>
+                  <div><div class="ab-gm-nm">Grille</div><div class="ab-gm-sub">Grande + petites</div></div>
+                </button>
+                <button type="button" class="ab-gm-opt" onclick="selGalMode(this,'slideshow')">
+                  <span class="ab-gm-ico">▶</span>
+                  <div><div class="ab-gm-nm">Diaporama</div><div class="ab-gm-sub">Défilement auto</div></div>
+                </button>
+                <button type="button" class="ab-gm-opt" onclick="selGalMode(this,'portrait')">
+                  <span class="ab-gm-ico">🖼</span>
+                  <div><div class="ab-gm-nm">Portrait</div><div class="ab-gm-sub">Format vertical</div></div>
+                </button>
+                <button type="button" class="ab-gm-opt" onclick="selGalMode(this,'circle')">
+                  <span class="ab-gm-ico">⭕</span>
+                  <div><div class="ab-gm-nm">Cercle</div><div class="ab-gm-sub">Photos rondes</div></div>
+                </button>
+                <button type="button" class="ab-gm-opt" onclick="selGalMode(this,'square')">
+                  <span class="ab-gm-ico">■</span>
+                  <div><div class="ab-gm-nm">Carré</div><div class="ab-gm-sub">Format carré</div></div>
+                </button>
               </div>
-              <div class="form-group full-width">
-                <label>Plan d'abonnement</label>
-                <div class="plan-options">
-                  <label class="plan-card <?= pre('plan') === 'basic' ? 'active' : '' ?>">
-                    <input type="radio" name="plan" value="basic" <?= pre('plan') === 'basic' ? 'checked' : '' ?>>
-                    <span class="plan-name">Basic</span>
-                    <span class="plan-price">10 000 FCFA</span>
-                  </label>
-                  <label class="plan-card <?= (pre('plan','standard') === 'standard') ? 'active' : '' ?>">
-                    <input type="radio" name="plan" value="standard" <?= (pre('plan','standard') === 'standard') ? 'checked' : '' ?>>
-                    <span class="plan-name">Standard</span>
-                    <span class="plan-price">15 000 FCFA</span>
-                  </label>
-                  <label class="plan-card <?= pre('plan') === 'premium' ? 'active' : '' ?>">
-                    <input type="radio" name="plan" value="premium" <?= pre('plan') === 'premium' ? 'checked' : '' ?>>
-                    <span class="plan-name">Premium</span>
-                    <span class="plan-price">20 000 FCFA</span>
-                  </label>
-                </div>
-              </div>
-              <div class="form-group full-width">
-                <label for="internal_notes">Notes internes</label>
-                <textarea id="internal_notes" name="internal_notes" rows="4"
-                          placeholder="Visible uniquement par LionTech..."><?= pre('internal_notes') ?></textarea>
-              </div>
+              <input type="hidden" id="gal_display_mode" name="gal_display_mode" value="grid">
+            </div>
+            <div class="ab-toggle-row">
+              <span class="ab-toggle-lbl">Bordure sur les photos</span>
+              <label class="ab-toggle"><input type="checkbox" name="gal_border"><span class="ab-toggle-knob"></span></label>
             </div>
           </div>
 
-          <!-- ── OUTPUT BOX — apparaît après soumission ── -->
-          <?php if ($save_success): ?>
-          <div class="out-box show" id="out-box">
-            <div class="out-top">
-              <i class="fa-solid fa-circle-check"></i>
-              <?= $edit_mode ? 'Business mis à jour avec succès !' : 'Compte créé avec succès !' ?>
+          <!-- ── S9: Style des Services ── -->
+          <div class="ab-card ab-sec" id="sec-svc">
+            <div class="ab-card-head">
+              <div class="ab-step">9</div>
+              <div>
+                <h2 class="ab-card-title">Style des Services</h2>
+                <p class="ab-card-sub">Comment les services s'affichent</p>
+              </div>
             </div>
-            <div class="out-label">Lien de réservation :</div>
-            <div class="out-link" id="out-link">lionrdv.cm/<?= htmlspecialchars($saved_slug) ?></div>
-            <div class="out-btns">
-              <button type="button" class="ob ob-gold" onclick="copyLink()">
-                <i class="fa-regular fa-copy"></i> Copier le lien
+            <div class="ab-svc-styles">
+              <button type="button" class="ab-ss-item" onclick="selSvcStyle(this,'cards')">
+                <span class="ab-ss-ico">🃏</span>
+                <div><div class="ab-ss-nm">Cards</div><div class="ab-ss-sub">Grille de cartes</div></div>
               </button>
-              <a href="/LionRDV/Utulisateur.php?slug=<?= urlencode($saved_slug) ?>"
-                 target="_blank" class="ob ob-ghost">
-                <i class="fa-solid fa-eye"></i> Voir la page client
-              </a>
+              <button type="button" class="ab-ss-item" onclick="selSvcStyle(this,'tabs')">
+                <span class="ab-ss-ico">📑</span>
+                <div><div class="ab-ss-nm">Onglets</div><div class="ab-ss-sub">Navigation par onglets</div></div>
+              </button>
+              <button type="button" class="ab-ss-item" onclick="selSvcStyle(this,'buttons')">
+                <span class="ab-ss-ico">🔘</span>
+                <div><div class="ab-ss-nm">Boutons</div><div class="ab-ss-sub">Liste de boutons</div></div>
+              </button>
+              <button type="button" class="ab-ss-item" onclick="selSvcStyle(this,'text')">
+                <span class="ab-ss-ico">📝</span>
+                <div><div class="ab-ss-nm">Texte simple</div><div class="ab-ss-sub">Liste avec puces</div></div>
+              </button>
+              <button type="button" class="ab-ss-item ab-ss-on" onclick="selSvcStyle(this,'pills')">
+                <span class="ab-ss-ico">💊</span>
+                <div><div class="ab-ss-nm">Pills</div><div class="ab-ss-sub">Tags arrondis colorés</div></div>
+              </button>
             </div>
-            <div class="out-credentials">
-              <div class="out-cred-title">Identifiants propriétaire</div>
-              <div class="out-cred-row"><span>URL connexion</span><strong>/LionRDV/Clien de LionTech/ClientLion.php</strong></div>
-              <div class="out-cred-row"><span>Email</span><strong><?= htmlspecialchars($prefill['owner_email'] ?? '') ?></strong></div>
-              <div class="out-cred-row"><span>Mot de passe</span><strong><?= htmlspecialchars($prefill['owner_password'] ?? '') ?></strong></div>
+            <input type="hidden" id="svc_display_style" name="svc_display_style" value="pills">
+          </div>
+
+          <!-- ── S10: À propos ── -->
+          <div class="ab-card ab-sec" id="sec-about">
+            <div class="ab-card-head">
+              <div class="ab-step">10</div>
+              <div>
+                <h2 class="ab-card-title">À propos</h2>
+                <p class="ab-card-sub">Style de la section description</p>
+              </div>
             </div>
-            <div class="out-business-preview">
-              <div class="out-preview-label">Aperçu page business</div>
-              <div class="out-preview-card">
-                <div class="out-preview-logo-wrap">
-                  <?php if (!empty($prefill['logo'])): ?>
-                    <img src="../<?= htmlspecialchars($prefill['logo']) ?>"
-                         id="out-logo-preview" style="display:block;">
-                  <?php else: ?>
-                    <div id="out-logo-placeholder" class="out-logo-placeholder">
-                      <i class="fa-solid fa-image"></i>
-                    </div>
-                  <?php endif; ?>
+            <div class="ab-grid">
+              <div class="ab-field">
+                <label class="ab-label">Police (override section)</label>
+                <select class="ab-select" name="about_font" onchange="syncPreview()">
+                  <option value="">Même que le site</option>
+                  <option value="Georgia,serif">Serif élégant</option>
+                  <option value="cursive">Script</option>
+                  <option value="monospace">Mono</option>
+                </select>
+              </div>
+              <div class="ab-field">
+                <label class="ab-label">Taille du texte</label>
+                <select class="ab-select" name="about_font_size" onchange="syncPreview()">
+                  <option value="1rem">Normale (1rem)</option>
+                  <option value="1.125rem">Grande (1.125rem)</option>
+                  <option value="1.25rem">Très grande (1.25rem)</option>
+                </select>
+              </div>
+              <div class="ab-field">
+                <label class="ab-label">Couleur du texte À propos</label>
+                <div class="ab-clr-row">
+                  <input type="color" class="ab-clr-sw" name="about_text_color" value="#444444">
+                  <input class="ab-input ab-mono-inp" value="#444444" maxlength="7">
                 </div>
-                <div class="out-preview-biz-name"><?= htmlspecialchars($prefill['name'] ?? '') ?></div>
-                <div class="out-preview-biz-sub">lionrdv.cm/<?= htmlspecialchars($saved_slug) ?></div>
-                <a href="/LionRDV/Clien%20de%20LionTech/ClientLion.php"
-                   target="_blank" class="out-connexion-btn">
-                  <i class="fa-solid fa-right-to-bracket"></i> Connexion
-                </a>
-                <div class="out-preview-note">
-                  <i class="fa-solid fa-circle-info"></i>
-                  Ce bouton est visible par le propriétaire sur sa page publique
-                </div>
+              </div>
+              <div class="ab-field">
+                <label class="ab-label">Position</label>
+                <select class="ab-select" name="about_position" id="about-pos" onchange="syncPreview()">
+                  <option value="before">Avant le bouton RDV</option>
+                  <option value="after" selected>Après le bouton RDV</option>
+                </select>
               </div>
             </div>
           </div>
-          <?php else: ?>
-          <div class="out-box" id="out-box">
-            <div class="out-top"><i class="fa-solid fa-circle-check"></i> Compte créé avec succès !</div>
-            <div class="out-label">Lien de réservation :</div>
-            <div class="out-link" id="out-link">lionrdv.cm/nora-beauty</div>
-            <div class="out-btns">
-              <button type="button" class="ob ob-gold" onclick="copyLink()"><i class="fa-regular fa-copy"></i> Copier le lien</button>
-              <button type="button" class="ob ob-ghost"><i class="fa-solid fa-qrcode"></i> Télécharger QR</button>
-              <button type="button" class="ob ob-ghost"><i class="fa-brands fa-whatsapp"></i> WhatsApp</button>
-            </div>
-            <div class="out-credentials">
-              <div class="out-cred-title">Identifiants propriétaire</div>
-              <div class="out-cred-row"><span>Email</span><strong id="out-email">—</strong></div>
-              <div class="out-cred-row"><span>Mot de passe</span><strong id="out-password">—</strong></div>
-            </div>
-            <div class="out-business-preview">
-              <div class="out-preview-label">Aperçu page business</div>
-              <div class="out-preview-card">
-                <div class="out-preview-logo-wrap">
-                  <img id="out-logo-preview" src="" alt="Logo" style="display:none;">
-                  <div id="out-logo-placeholder" class="out-logo-placeholder"><i class="fa-solid fa-image"></i></div>
-                </div>
-                <div class="out-preview-biz-name" id="out-biz-name">Nom du business</div>
-                <div class="out-preview-biz-sub" id="out-biz-sub">lionrdv.cm/slug</div>
-                <a href="/LionRDV/Clien%20de%20LionTech/ClientLion.php" target="_blank" class="out-connexion-btn">
-                  <i class="fa-solid fa-right-to-bracket"></i> Connexion
-                </a>
-                <div class="out-preview-note"><i class="fa-solid fa-circle-info"></i> Ce bouton est visible par le propriétaire sur sa page publique</div>
+
+          <!-- ── S11: Bouton RDV ── -->
+          <div class="ab-card ab-sec" id="sec-btn">
+            <div class="ab-card-head">
+              <div class="ab-step">11</div>
+              <div>
+                <h2 class="ab-card-title">Style du bouton RDV</h2>
+                <p class="ab-card-sub">Forme et texte du bouton principal</p>
               </div>
+            </div>
+            <div class="ab-btn-styles" id="ab-btn-grid">
+              <button type="button" class="ab-bs-opt ab-bs-on" onclick="selBtnStyle(this,'filled','0.5rem')">
+                <div class="ab-bs-preview" style="background:#C9A84C;border-radius:0.5rem;">RDV</div>
+                <div class="ab-bs-nm">Plein</div>
+              </button>
+              <button type="button" class="ab-bs-opt" onclick="selBtnStyle(this,'pill','999px')">
+                <div class="ab-bs-preview" style="background:#C9A84C;border-radius:999px;">RDV</div>
+                <div class="ab-bs-nm">Pill</div>
+              </button>
+              <button type="button" class="ab-bs-opt" onclick="selBtnStyle(this,'outline','0.5rem')">
+                <div class="ab-bs-preview" style="background:transparent;border:2px solid #C9A84C;border-radius:0.5rem;color:#C9A84C;">RDV</div>
+                <div class="ab-bs-nm">Contour</div>
+              </button>
+              <button type="button" class="ab-bs-opt" onclick="selBtnStyle(this,'square','0.25rem')">
+                <div class="ab-bs-preview" style="background:#C9A84C;border-radius:0.25rem;">RDV</div>
+                <div class="ab-bs-nm">Carré</div>
+              </button>
+              <button type="button" class="ab-bs-opt" onclick="selBtnStyle(this,'soft','0.5rem')">
+                <div class="ab-bs-preview" style="background:rgba(201,168,76,0.15);border:1px solid rgba(201,168,76,0.4);border-radius:0.5rem;color:#C9A84C;">RDV</div>
+                <div class="ab-bs-nm">Doux</div>
+              </button>
+              <button type="button" class="ab-bs-opt" onclick="selBtnStyle(this,'dark','0.5rem')">
+                <div class="ab-bs-preview" style="background:#0A0A0A;border-radius:0.5rem;color:#C9A84C;">RDV</div>
+                <div class="ab-bs-nm">Sombre</div>
+              </button>
+            </div>
+            <input type="hidden" id="btn_style" name="btn_style" value="filled">
+            <div class="ab-field" style="margin-top:.75rem;">
+              <label class="ab-label">Texte du bouton</label>
+              <input class="ab-input" id="inp-btn-txt" name="btn_text" value="Prendre rendez-vous" oninput="syncPreview()">
+            </div>
+            <div class="ab-field">
+              <label class="ab-label">Couleurs des boutons secondaires</label>
+              <div class="ab-clr-row">
+                <input type="color" class="ab-clr-sw" name="button_color" id="btn-clr" value="#C9A84C" oninput="syncPreview()">
+                <input class="ab-input ab-mono-inp" value="#C9A84C" maxlength="7" oninput="document.getElementById('btn-clr').value=this.value;syncPreview()">
+              </div>
+            </div>
+          </div>
+
+          <!-- ── S12: Ordre des sections ── -->
+          <div class="ab-card ab-sec" id="sec-order">
+            <div class="ab-card-head">
+              <div class="ab-step">12</div>
+              <div>
+                <h2 class="ab-card-title">Ordre des sections</h2>
+                <p class="ab-card-sub">Cliquez deux numéros pour les échanger</p>
+              </div>
+            </div>
+            <p class="ab-hint" style="margin-bottom:.5rem;">Sélectionnez un numéro, puis un autre pour les échanger de place</p>
+            <div class="ab-so-list" id="ab-so-list"></div>
+          </div>
+
+          <!-- ── S13: Compte propriétaire ── -->
+          <div class="ab-card ab-sec" id="sec-account">
+            <div class="ab-card-head">
+              <div class="ab-step">13</div>
+              <div>
+                <h2 class="ab-card-title">Compte propriétaire</h2>
+                <p class="ab-card-sub">WhatsApp + mot de passe temporaire</p>
+              </div>
+            </div>
+            <div class="ab-grid">
+              <div class="ab-field ab-field-full">
+                <label class="ab-label">Numéro WhatsApp (identifiant de connexion)</label>
+                <div class="ab-prefix"><span>+237</span><input type="tel" name="owner_whatsapp" placeholder="6XX XXX XXX"></div>
+                <p class="ab-hint">Pas d'email requis — le propriétaire se connecte avec son numéro</p>
+              </div>
+              <div class="ab-field ab-field-full">
+                <label class="ab-label">Mot de passe temporaire</label>
+                <div class="ab-pwd-row">
+                  <input class="ab-input" type="text" id="pwd-inp" name="temp_password" placeholder="Lion2026!">
+                  <button type="button" class="ab-gen-btn" onclick="genPwd()">Générer</button>
+                </div>
+                <p class="ab-hint">Le propriétaire devra le changer à la première connexion</p>
+              </div>
+              <div class="ab-field ab-field-full">
+                <label class="ab-label">Plan d'abonnement</label>
+                <div class="ab-plan-grid" id="ab-plan-grid">
+                  <button type="button" class="ab-plan-opt" onclick="selPlan(this,'basic')">
+                    <div class="ab-plan-nm">Basic</div><div class="ab-plan-pr">10 000 F/mois</div>
+                  </button>
+                  <button type="button" class="ab-plan-opt ab-plan-on" onclick="selPlan(this,'standard')">
+                    <div class="ab-plan-nm">Standard</div><div class="ab-plan-pr">15 000 F/mois</div>
+                  </button>
+                  <button type="button" class="ab-plan-opt" onclick="selPlan(this,'premium')">
+                    <div class="ab-plan-nm">Premium</div><div class="ab-plan-pr">20 000 F/mois</div>
+                  </button>
+                </div>
+                <input type="hidden" id="plan-inp" name="plan" value="standard">
+              </div>
+              <div class="ab-field ab-field-full">
+                <label class="ab-label">Notes internes (LionTech uniquement)</label>
+                <textarea class="ab-textarea" name="internal_notes" rows="3" placeholder="Visible uniquement par LionTech..."></textarea>
+              </div>
+            </div>
+          </div>
+
+          <!-- SUCCESS BOX -->
+          <?php if ($save_success): ?>
+          <div class="ab-suc-box">
+            <div class="ab-suc-head"><i class="fa-solid fa-circle-check"></i> Business créé avec succès !</div>
+            <div class="ab-suc-row">Lien : <strong>lionrdv.cm/<?= h($saved_slug) ?></strong></div>
+            <div class="ab-suc-row">WhatsApp : <strong><?= h($prefill['owner_whatsapp'] ?? '') ?></strong></div>
+            <div class="ab-suc-row">Mot de passe : <strong><?= h($prefill['owner_password'] ?? '') ?></strong></div>
+            <div class="ab-suc-btns">
+              <a href="/LionRDV/Utilisateur%20du%20client/Utulisateur.php?slug=<?= urlencode($saved_slug) ?>"
+                 target="_blank" class="ab-suc-btn ab-suc-dark">
+                <i class="fa-solid fa-eye"></i> Voir la page
+              </a>
+              <a href="../RSVAdmin.php" class="ab-suc-btn ab-suc-gold">
+                <i class="fa-solid fa-arrow-left"></i> Dashboard
+              </a>
             </div>
           </div>
           <?php endif; ?>
 
-        </section>
-
-        <!-- ── RIGHT PREVIEW PANEL ── -->
-        <aside class="addbiz-preview-panel">
-          <div class="preview-top-actions">
-            <a href="../RSVAdmin.php" class="preview-btn dark">
-              <i class="fa-solid fa-arrow-left"></i> Retour
-            </a>
-            <button type="submit" form="biz-form" class="preview-btn solid">
-              <?= $edit_mode ? 'Enregistrer' : 'Confirmer & créer' ?>
+          <!-- SUBMIT -->
+          <div class="ab-submit-wrap">
+            <button type="submit" class="ab-btn-final">
+              <i class="fa-solid fa-check"></i> Créer le compte business
             </button>
           </div>
-          <div class="preview-toolbar">
-            <div class="lang-switch">
-              <span>LANGUE</span>
-              <button type="button" class="lang-btn active">FR</button>
-              <button type="button" class="lang-btn">EN</button>
-            </div>
-            <div class="theme-switch">
-              <span>THÈME</span>
-              <div class="theme-preview-dots">
-                <span class="theme-dot pink active"></span>
-                <span class="theme-dot black"></span>
-                <span class="theme-dot blue"></span>
-                <span class="theme-dot green"></span>
-                <span class="theme-dot orange"></span>
-                <span class="theme-dot purple"></span>
-                <span class="theme-dot red"></span>
-                <span class="theme-dot darkgreen"></span>
-              </div>
-            </div>
-          </div>
-          <div class="preview-business-tags">
-            <span class="preview-tag">● Nora Beauty · Salon de beauté</span>
-            <span class="preview-tag">lionrdv.cm/nora-beauty</span>
-          </div>
-          <div class="preview-card-row">
-            <div class="preview-info-card">
-              <div class="preview-info-icon gold"><i class="fa-regular fa-user"></i></div>
-              <h3>Vue Client (Propriétaire du salon)</h3>
-              <p>Ce que voit Nora quand elle se connecte à son dashboard.</p>
-              <span class="mini-pill">Accès via Connexion</span>
-            </div>
-            <div class="preview-info-card">
-              <div class="preview-info-icon gray"><i class="fa-solid fa-mobile-screen"></i></div>
-              <h3>Vue Customer (Le client qui réserve)</h3>
-              <p>Ce que voit la personne qui scanne le QR code ou ouvre le lien.</p>
-              <span class="mini-pill">Accès via QR / lien</span>
-            </div>
-          </div>
-          <div class="preview-section-title">
-            <span class="preview-badge">CLIENT</span>
-            <div>
-              <h3>Dashboard propriétaire</h3>
-              <p>Se connecte via lionrdv.cm/login</p>
-            </div>
-          </div>
-          <div class="phone-preview-row">
-            <div class="phone-mockup">
-              <div class="phone-screen pink-theme">
-                <div class="phone-header">Nora Beauty</div>
-                <div class="phone-body">
-                  <div class="phone-stat-row"><div class="phone-stat">8</div><div class="phone-stat">47K</div><div class="phone-stat">4.9</div></div>
-                  <div class="phone-card">Planning du jour</div>
-                  <div class="phone-card">09h30 - Awa Tchoupo</div>
-                  <div class="phone-card">11h00 - Carine Bebe</div>
-                  <div class="phone-card">08h00 - Marie N.</div>
-                </div>
-              </div>
-              <p class="phone-caption">Dashboard quotidien avec planning et statistiques</p>
-            </div>
-            <div class="phone-mockup">
-              <div class="phone-screen pink-theme">
-                <div class="phone-header">Nora Beauty</div>
-                <div class="phone-body">
-                  <div class="phone-card">Disponibilités</div>
-                  <div class="phone-card">Lundi 08h00 - 18h00</div>
-                  <div class="phone-card">Mardi 08h00 - 18h00</div>
-                  <div class="phone-card">Employés actifs: 4</div>
-                </div>
-              </div>
-              <p class="phone-caption">Gestion des horaires, jours et employés</p>
-            </div>
-          </div>
-          <div class="preview-section-title lower">
-            <span class="preview-badge secondary">CUSTOMER</span>
-            <div>
-              <h3>Page de réservation — ce que voit le client final</h3>
-              <p>Accessible via QR code ou lien</p>
-            </div>
-          </div>
-          <div class="phone-preview-row">
-            <div class="phone-mockup">
-              <div class="phone-screen pink-theme">
-                <div class="phone-header">Nora Beauty</div>
-                <div class="phone-body">
-                  <div class="phone-card">Choisissez une catégorie</div>
-                  <div class="phone-card">Cheveux · Ongles · Maquillage</div>
-                  <div class="phone-card">Coupe & Brushing - 2 500 F</div>
-                  <div class="phone-card">Lissage - 9 000 F</div>
-                </div>
-              </div>
-              <p class="phone-caption">Catégorie et sélection du service</p>
-            </div>
-            <div class="phone-mockup">
-              <div class="phone-screen pink-theme">
-                <div class="phone-header">Choisissez un créneau</div>
-                <div class="phone-body">
-                  <div class="phone-card">Mar 09 - 10h00</div>
-                  <div class="phone-card">Service: Coupe & Brushing</div>
-                  <div class="phone-card">Total: 2 500 FCFA</div>
-                  <div class="confirm-box">Confirmer la RDV</div>
-                </div>
-              </div>
-              <p class="phone-caption">Date, heure, paiement et confirmation</p>
-            </div>
-          </div>
-        </aside>
 
+        </form>
       </div>
-    </form>
+      <!-- /form-col -->
+
+      <!-- ═══════ PREVIEW COLUMN ═══════ -->
+      <div class="ab-preview-col">
+        <div class="ab-prev-bar">
+          <span class="ab-prev-title">
+            <i class="fa-solid fa-eye"></i> Aperçu live
+          </span>
+          <div class="ab-dev-btns">
+            <button class="ab-dev-btn ab-dev-on" id="btn-mob" onclick="setDevice('mobile')">
+              <i class="fa-solid fa-mobile-screen"></i> Mobile
+            </button>
+            <button class="ab-dev-btn" id="btn-desk" onclick="setDevice('desktop')">
+              <i class="fa-solid fa-desktop"></i> Desktop
+            </button>
+          </div>
+        </div>
+        <div class="ab-prev-wrap" id="ab-prev-wrap">
+          <div class="ab-phone-shell" id="ab-phone-shell">
+            <iframe
+              id="preview-iframe"
+              src="/LionRDV/Utilisateur%20du%20client/Utulisateur.php?preview=1"
+              title="Aperçu live de la page client">
+            </iframe>
+          </div>
+        </div>
+      </div>
+      <!-- /preview-col -->
+
+    </div>
+    <!-- /builder -->
+
   </main>
 </div>
 
 <script src="../RSVAdmin.js"></script>
 <script>
-/* Update business_type_label hidden field when type changes */
-document.querySelectorAll('input[name="business_type"]').forEach(function(radio) {
+/* ============================================================
+   AjouterBussiness.js — Live Preview Engine
+   Envoie les données du formulaire à l'iframe via postMessage
+   L'iframe (Utulisateur.php?preview=1) reçoit et met à jour
+============================================================ */
+const iframe  = document.getElementById('preview-iframe');
+const formCol = document.getElementById('ab-form-col');
+
+let currentColor   = '#C9A84C';
+let savedColors    = [];
+let btnStyle       = 'filled';
+let btnRadius      = '0.5rem';
+let galMode        = 'grid';
+let svcStyle       = 'pills';
+let horStyle       = 'list';
+let sections       = [
+  {id:'rdv',      nm:'Rendez-vous',  ico:'📅'},
+  {id:'services', nm:'Nos Services', ico:'🍽'},
+  {id:'horaires', nm:'Horaires',     ico:'🕐'},
+  {id:'about',    nm:'À propos',     ico:'ℹ'},
+  {id:'gallery',  nm:'Galerie',      ico:'📷'},
+  {id:'contact',  nm:'Contact',      ico:'📍'},
+];
+let soSel = -1;
+
+/* ── Charger les couleurs sauvegardées depuis sessionStorage ── */
+try {
+  const sc = sessionStorage.getItem('lionrdv_saved_colors');
+  if (sc) { savedColors = JSON.parse(sc); renderSavedColors(); }
+} catch(e) {}
+
+/* ── Construire le payload à envoyer à l'iframe ── */
+function buildPayload() {
+  const d = {};
+
+  /* ── Champs texte / select / hidden ── */
+  const fields = [
+    'business_name','site_language','navbar_style','footer_style',
+    'global_font','global_font_size','global_font_weight',
+    'text_color','btn_style','bg_texture','background_color',
+    'about_position','about_font','about_font_size','about_text_color',
+    'svc_display_style','gal_display_mode','gal_max_photos','btn_text',
+    'city','quarter','button_color',
+  ];
+  fields.forEach(id => {
+    const el = document.getElementById(id) || document.querySelector('[name="'+id+'"]');
+    if (el) d[id] = el.value;
+  });
+
+  /* ── Couleur principale (variable JS, toujours à jour) ── */
+  d.primary_color = currentColor;
+
+  /* ── Variables JS pour galerie, services, boutons ── */
+  d.btn_style      = btnStyle;
+  d.btn_radius     = btnRadius;
+  d.gal_mode       = galMode;       /* mode galerie sélectionné */
+  d.svc_style      = svcStyle;      /* style services sélectionné */
+  d.hor_style      = horStyle;
+  d.sections_order = sections.map(s => s.id);
+
+  /* ── Business type : lire le radio COCHÉ, pas le premier ── */
+  const checkedType = document.querySelector('[name="business_type"]:checked');
+  if (checkedType) d.business_type = checkedType.value;
+
+  /* ── Checkboxes : lire .checked et convertir en 0/1 ── */
+  d.show_connexion_btn  = document.getElementById('tog-conn')?.checked    ? 1 : 0;
+  d.show_avatar         = document.getElementById('tog-avatar')?.checked  ? 1 : 0;
+  d.show_liontech_logo  = document.querySelector('[name="show_liontech_logo"]')?.checked ? 1 : 0;
+  d.show_business_logo  = document.querySelector('[name="show_business_logo"]')?.checked ? 1 : 0;
+
+  /* ── Position À propos ── */
+  d.about_pos = document.getElementById('about-pos')?.value || 'after';
+
+  return d;
+}
+
+function sendPreview() {
+  try { iframe.contentWindow.postMessage({type:'PREVIEW_UPDATE', data: buildPayload()}, '*'); } catch(e) {}
+}
+
+let debTimer = null;
+function syncPreview() { clearTimeout(debTimer); debTimer = setTimeout(sendPreview, 120); }
+
+/* ── Écouter les clics de section depuis l'iframe ── */
+window.addEventListener('message', e => {
+  if (!e.data || e.data.type !== 'SECTION_CLICK') return;
+  const map = {
+    navbar:'sec-cover', hero:'sec-cover', colors:'sec-colors',
+    services:'sec-svc', gallery:'sec-gallery', footer:'sec-bg',
+    contact:'sec-info', info:'sec-info', about:'sec-about',
+    logo:'sec-cover', rdv:'sec-btn',
+  };
+  const secId = map[e.data.section] || 'sec-' + e.data.section;
+  const el = document.getElementById(secId);
+  if (!el) return;
+  formCol.scrollTo({top: el.offsetTop - 10, behavior: 'smooth'});
+  document.querySelectorAll('.ab-card.ab-hl').forEach(x => x.classList.remove('ab-hl'));
+  el.classList.add('ab-hl');
+  setTimeout(() => el.classList.remove('ab-hl'), 1800);
+});
+
+/* ── Couleurs ── */
+function setColor(c, dot) {
+  currentColor = c;
+  document.getElementById('primary_color').value = c;
+  document.getElementById('ab-clr-picker').value = c;
+  document.getElementById('ab-clr-hex').value = c;
+  document.querySelectorAll('.ab-clr-dot').forEach(d => d.classList.remove('ab-clr-on'));
+  if (dot) dot.classList.add('ab-clr-on');
+  sendPreview();
+}
+function saveColor() {
+  const c = document.getElementById('ab-clr-hex').value.trim();
+  if (!c.match(/^#[0-9A-Fa-f]{3,6}$/)) return;
+  if (savedColors.includes(c)) { setColor(c, null); return; }
+  savedColors.push(c);
+  try { sessionStorage.setItem('lionrdv_saved_colors', JSON.stringify(savedColors)); } catch(e) {}
+  renderSavedColors();
+  setColor(c, null);
+}
+function renderSavedColors() {
+  const box = document.getElementById('ab-saved-colors');
+  if (!savedColors.length) { box.innerHTML = '<span class="ab-saved-empty">Aucune couleur sauvegardée</span>'; return; }
+  box.innerHTML = savedColors.map((c, i) =>
+    `<button type="button" class="ab-saved-dot" style="background:${c};"
+      onclick="setColor('${c}',null)"
+      ondblclick="delSaved(${i})" title="${c} · double-clic pour supprimer"></button>`
+  ).join('');
+}
+function delSaved(i) {
+  savedColors.splice(i, 1);
+  try { sessionStorage.setItem('lionrdv_saved_colors', JSON.stringify(savedColors)); } catch(e) {}
+  renderSavedColors();
+}
+
+/* ── Bouton Connexion ── */
+function toggleConnBtn(el) {
+  try { iframe.contentWindow.postMessage({type:'PREVIEW_CONN', show: el.checked}, '*'); } catch(e) {}
+  sendPreview();
+}
+
+/* ── Avatar ── */
+function toggleAvatar(el) {
+  document.getElementById('avatar-wrap').style.display = el.checked ? 'block' : 'none';
+  sendPreview();
+}
+
+/* ── Upload fichiers ── */
+function handleLogo(input) {
+  const file = input.files[0]; if (!file) return;
+  const r = new FileReader();
+  r.onload = e => {
+    const img = document.getElementById('logo-img');
+    img.src = e.target.result; img.style.display = 'block';
+    document.getElementById('logo-thumb').querySelector('i').style.display = 'none';
+    try { iframe.contentWindow.postMessage({type:'PREVIEW_LOGO', src: e.target.result}, '*'); } catch(ex) {}
+  };
+  r.readAsDataURL(file);
+}
+function handleCover(input) {
+  const file = input.files[0]; if (!file) return;
+  const r = new FileReader();
+  r.onload = e => {
+    const img = document.getElementById('cover-img');
+    img.src = e.target.result; img.style.display = 'block';
+    document.getElementById('cover-thumb').querySelector('i').style.display = 'none';
+    try { iframe.contentWindow.postMessage({type:'PREVIEW_COVER', src: e.target.result}, '*'); } catch(ex) {}
+  };
+  r.readAsDataURL(file);
+}
+function handleAvatar(input) {
+  const file = input.files[0]; if (!file) return;
+  const r = new FileReader();
+  r.onload = e => {
+    const img = document.getElementById('avatar-img');
+    img.src = e.target.result; img.style.display = 'block';
+    document.getElementById('avatar-thumb').querySelector('i').style.display = 'none';
+    try { iframe.contentWindow.postMessage({type:'PREVIEW_AVATAR', src: e.target.result}, '*'); } catch(ex) {}
+  };
+  r.readAsDataURL(file);
+}
+
+/* ── Position overlay ── */
+function selPos(btn, pos) {
+  const row = btn.closest('.ab-ov-pos');
+  row.querySelectorAll('.ab-pos-btn').forEach(b => b.classList.remove('ab-pos-on'));
+  btn.classList.add('ab-pos-on');
+  const field = btn.dataset.field;
+  const inp = document.querySelector('input[name="'+field+'"]');
+  if (inp) inp.value = pos;
+}
+
+/* ── Police ── */
+function selFont(btn, font) {
+  document.querySelectorAll('.ab-font-opt').forEach(b => b.classList.remove('ab-font-on'));
+  btn.classList.add('ab-font-on');
+  document.getElementById('global_font').value = font;
+  try { iframe.contentWindow.postMessage({type:'PREVIEW_FONT', font}, '*'); } catch(e) {}
+}
+function toggleCustomFont() { document.getElementById('custom-font-row').classList.toggle('ab-show'); }
+function applyCustomFont() {
+  const f = document.getElementById('custom-font-inp').value.trim();
+  if (!f) return;
+  document.getElementById('global_font').value = f;
+  try { iframe.contentWindow.postMessage({type:'PREVIEW_FONT', font: `'${f}', system-ui`}, '*'); } catch(e) {}
+}
+
+/* ── Taille et poids ── */
+function selSize(btn, size) {
+  document.querySelectorAll('#ab-size-grid .ab-sz').forEach(b => b.classList.remove('ab-sz-on'));
+  btn.classList.add('ab-sz-on');
+  document.getElementById('global_font_size').value = size;
+  sendPreview();
+}
+function selWeight(btn, weight) {
+  document.querySelectorAll('#ab-weight-grid .ab-sz').forEach(b => b.classList.remove('ab-sz-on'));
+  btn.classList.add('ab-sz-on');
+  document.getElementById('global_font_weight').value = weight;
+}
+
+/* ── Fond ── */
+function selBg(btn) {
+  document.querySelectorAll('.ab-bg-opt').forEach(b => { b.classList.remove('ab-bg-on'); b.style.borderColor = 'transparent'; });
+  btn.classList.add('ab-bg-on'); btn.style.borderColor = '#C9A84C';
+  /* Mettre à jour les inputs hidden AVANT d'envoyer le preview */
+  document.getElementById('bg_texture').value = btn.dataset.tex;
+  document.getElementById('background_color').value = btn.dataset.bg;
+  /* Envoyer PREVIEW_BG pour application immédiate du fond */
+  try { iframe.contentWindow.postMessage({type:'PREVIEW_BG', tex: btn.dataset.tex, bg: btn.dataset.bg}, '*'); } catch(e) {}
+  /* Envoyer aussi PREVIEW_UPDATE pour re-rendre galerie/services avec la nouvelle couleur */
+  sendPreview();
+}
+function toggleCustomBg() { document.getElementById('custom-bg-row').classList.toggle('ab-show'); }
+function applyCustomBg() {
+  const v = document.getElementById('custom-bg-inp').value.trim();
+  if (!v) return;
+  document.querySelectorAll('.ab-bg-opt').forEach(b => { b.classList.remove('ab-bg-on'); b.style.borderColor = 'transparent'; });
+  try { iframe.contentWindow.postMessage({type:'PREVIEW_BG_CUSTOM', css: v}, '*'); } catch(e) {}
+}
+
+/* ── Horaires ── */
+function togDay(en, open) {
+  const row = document.getElementById('day-' + en);
+  const nm = row?.querySelector('.ab-day-nm');
+  const inputs = row?.querySelectorAll('.ab-time-inp');
+  const ferme = row?.querySelector('.ab-day-ferme');
+  if (!row) return;
+  if (nm) nm.classList.toggle('ab-day-off', !open);
+  if (inputs) inputs.forEach(i => i.style.display = open ? '' : 'none');
+  if (open && ferme) ferme.style.display = 'none';
+  else if (!open && ferme) ferme.style.display = '';
+}
+function selHorStyle(btn, style) {
+  document.querySelectorAll('#ab-hor-grid .ab-hor-opt').forEach(b => b.classList.remove('ab-hor-on'));
+  btn.classList.add('ab-hor-on');
+  document.getElementById('hor_style').value = style;
+  horStyle = style; sendPreview();
+}
+
+/* ── Galerie ── */
+function selGalMax(btn, n) {
+  document.querySelectorAll('#ab-gal-max .ab-gmb').forEach(b => b.classList.remove('ab-gmb-on'));
+  btn.classList.add('ab-gmb-on');
+  document.getElementById('gal_max_photos').value = n;
+}
+function selGalMode(btn, mode) {
+  document.querySelectorAll('#ab-gal-modes .ab-gm-opt').forEach(b => b.classList.remove('ab-gm-on'));
+  btn.classList.add('ab-gm-on');
+  document.getElementById('gal_display_mode').value = mode;
+  galMode = mode; sendPreview();
+}
+
+/* ── Services ── */
+function selSvcStyle(btn, style) {
+  document.querySelectorAll('.ab-ss-item').forEach(b => b.classList.remove('ab-ss-on'));
+  btn.classList.add('ab-ss-on');
+  document.getElementById('svc_display_style').value = style;
+  svcStyle = style; sendPreview();
+}
+
+/* ── Bouton RDV ── */
+function selBtnStyle(btn, style, radius) {
+  document.querySelectorAll('#ab-btn-grid .ab-bs-opt').forEach(b => b.classList.remove('ab-bs-on'));
+  btn.classList.add('ab-bs-on');
+  document.getElementById('btn_style').value = style;
+  btnStyle = style; btnRadius = radius; sendPreview();
+}
+
+/* ── Ordre des sections ── */
+function initOrder() {
+  const list = document.getElementById('ab-so-list');
+  list.innerHTML = sections.map((s, i) =>
+    `<div class="ab-so-item" data-idx="${i}" onclick="clickOrder(this)">
+       <div class="ab-so-num">${i+1}</div>
+       <span class="ab-so-ico">${s.ico}</span>
+       <span class="ab-so-nm">${s.nm}</span>
+     </div>`
+  ).join('');
+}
+function clickOrder(el) {
+  const idx = parseInt(el.dataset.idx);
+  if (soSel === -1) { soSel = idx; el.classList.add('ab-so-sel'); }
+  else if (soSel === idx) { soSel = -1; el.classList.remove('ab-so-sel'); }
+  else {
+    const tmp = sections[soSel]; sections[soSel] = sections[idx]; sections[idx] = tmp;
+    soSel = -1; initOrder(); sendPreview();
+  }
+}
+
+/* ── Plan ── */
+function selPlan(btn, plan) {
+  document.querySelectorAll('#ab-plan-grid .ab-plan-opt').forEach(b => b.classList.remove('ab-plan-on'));
+  btn.classList.add('ab-plan-on');
+  document.getElementById('plan-inp').value = plan;
+}
+
+/* ── Génération mot de passe ── */
+function genPwd() {
+  const c = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789!@#';
+  let p = '';
+  for (let i = 0; i < 10; i++) p += c[Math.floor(Math.random() * c.length)];
+  document.getElementById('pwd-inp').value = p;
+}
+
+/* ── Device toggle ── */
+function setDevice(mode) {
+  const shell = document.getElementById('ab-phone-shell');
+  const wrap  = document.getElementById('ab-prev-wrap');
+  const mb    = document.getElementById('btn-mob');
+  const db    = document.getElementById('btn-desk');
+  if (mode === 'desktop') {
+    shell.classList.add('ab-desktop'); wrap.classList.add('ab-desk-mode');
+    mb.classList.remove('ab-dev-on'); db.classList.add('ab-dev-on');
+  } else {
+    shell.classList.remove('ab-desktop'); wrap.classList.remove('ab-desk-mode');
+    mb.classList.add('ab-dev-on'); db.classList.remove('ab-dev-on');
+  }
+}
+
+/* ── Écouter tous les inputs du formulaire ── */
+document.getElementById('biz-form').querySelectorAll('input:not([type=file]):not([type=color]),textarea,select').forEach(el => {
+  el.addEventListener('input',  () => syncPreview());
+  el.addEventListener('change', () => sendPreview());
+});
+document.getElementById('biz-form').querySelectorAll('input[type=color]').forEach(el => {
+  el.addEventListener('input', () => sendPreview());
+});
+
+/* ── Langue — changer l'apparence des options ── */
+document.querySelectorAll('.ab-lang-opt input').forEach(radio => {
   radio.addEventListener('change', function() {
-    var labels = {
-      salon:'Salon de beauté', restaurant:'Restaurant', hotel:'Hôtellerie',
-      medical:'Clinique / Médical', barber:'Barbier', fitness:'Sport & Fitness',
-      photo:'Photographie', law:'Avocat / Cabinet', coach:'Coach', other:'Autre'
-    };
-    var lbl = document.getElementById('business_type_label');
-    if (lbl) lbl.value = labels[this.value] || this.value;
+    document.querySelectorAll('.ab-lang-opt').forEach(o => o.classList.remove('ab-lang-on'));
+    this.closest('.ab-lang-opt').classList.add('ab-lang-on');
+    syncPreview();
   });
 });
 
-function previewLogo(input) {
-  if (input.files && input.files[0]) {
-    var reader = new FileReader();
-    reader.onload = function(e) {
-      var img = document.getElementById('out-logo-preview');
-      var ph  = document.getElementById('out-logo-placeholder');
-      if (img) { img.src = e.target.result; img.style.display = 'block'; }
-      if (ph)  { ph.style.display = 'none'; }
-    };
-    reader.readAsDataURL(input.files[0]);
-  }
-}
-
-function copyLink() {
-  var link = document.getElementById('out-link');
-  if (!link) return;
-  if (navigator.clipboard) {
-    navigator.clipboard.writeText('https://' + link.textContent.trim())
-      .then(function() { alert('✓ Lien copié !'); });
-  }
-}
+/* ── Envoyer quand iframe charge ── */
+iframe.addEventListener('load', () => setTimeout(sendPreview, 150));
+window.addEventListener('load', () => { initOrder(); setTimeout(sendPreview, 400); });
 </script>
 </body>
 </html>
