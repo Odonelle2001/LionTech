@@ -755,3 +755,120 @@ body {
 * { scrollbar-width: thin; scrollbar-color: #E2DDD4 transparent; }
 *::-webkit-scrollbar { width: 4px; }
 *::-webkit-scrollbar-thumb { background: #E2DDD4; border-radius: 4px; }
+
+/* ============================================================
+   PATCHES — compatibility with current Utulisateur.php HTML
+   ============================================================ */
+
+/* Hero h1 used instead of .cl-hero-name */
+.cl-hero-info h1 {
+  font-size: 22px;
+  font-weight: 800;
+  line-height: 1.2;
+  color: #fff;
+  margin: 0;
+}
+
+/* Section h2 used instead of .cl-section-title */
+.cl-section h2 {
+  font-size: 14px;
+  font-weight: 800;
+  color: var(--text-color, #222);
+  margin-bottom: 14px;
+}
+
+/* Paragraphs inside sections */
+.cl-section p {
+  font-size: 13px;
+  color: #7A7570;
+  line-height: 1.75;
+}
+
+/* Status dot — .dot.open / .dot.closed */
+.dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  display: inline-block;
+}
+.dot.open   { background: #22c55e; }
+.dot.closed { background: #ef4444; }
+
+/* Empty gallery / services */
+.cl-gallery-empty,
+.cl-empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 100px;
+  padding: 20px;
+  background: var(--brand-rgba, rgba(201,168,76,0.08));
+  border: 1px dashed var(--brand, #C9A84C);
+  border-radius: 12px;
+  font-size: 13px;
+  color: #7A7570;
+  text-align: center;
+}
+
+/* Service row — .cl-service-left + .svc-* */
+.cl-service-left {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex: 1;
+  min-width: 0;
+}
+.svc-color {
+  width: 4px;
+  height: 38px;
+  border-radius: 2px;
+  flex-shrink: 0;
+  display: inline-block;
+}
+.svc-name {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text-color, #222);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.svc-duration {
+  font-size: 11px;
+  color: #7A7570;
+  margin-top: 2px;
+}
+.svc-price {
+  font-size: 13px;
+  font-weight: 800;
+  color: var(--text-color, #222);
+  white-space: nowrap;
+}
+
+/* Login button in navbar */
+.cl-login-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 14px;
+  border-radius: 999px;
+  background: var(--btn-color, #C9A84C);
+  color: #fff;
+  font-weight: 700;
+  font-size: 12px;
+  text-decoration: none;
+  transition: opacity 0.2s;
+}
+.cl-login-btn:hover { opacity: 0.88; }
+
+/* Hero placeholder icon/text */
+.cl-hero-placeholder i   { font-size: 36px; color: rgba(255,255,255,0.5); }
+.cl-hero-placeholder span { font-size: 13px; color: rgba(255,255,255,0.6); font-weight: 600; }
+
+/* Contact strong */
+.cl-contact-row strong { font-weight: 700; color: var(--text-color, #222); }
+
+/* Hours list — plain span used */
+.cl-hours-row span:first-child { font-weight: 700; color: var(--text-color, #222); }
+.cl-hours-row span:last-child  { font-weight: 600; color: var(--text-color, #222); }

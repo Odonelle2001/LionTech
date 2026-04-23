@@ -1,0 +1,1590 @@
+/* ============================================================
+   clientLion.css — LionRDV Espace Propriétaire
+   Thème : Clair par défaut · Sombre via data-theme="dark"
+   Couleur brand : --brand (injectée par PHP selon le business)
+
+   RÈGLE : Aucune taille de police ne doit être inférieure à 1rem.
+   Toutes les tailles sont définies en rem.
+
+   COMMENTAIRES : Chaque section indique ce qu'elle affecte à l'écran.
+   ============================================================ */
+
+@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap');
+
+/* ═══════════════════════════════════════════════════════════
+   VARIABLES GLOBALES — Thème clair et sombre
+   Affecte : toute l'application (fond, texte, bordures)
+═══════════════════════════════════════════════════════════ */
+:root {
+  /* Couleur brand injectée par PHP — fallback gold LionTech */
+  --brand:          #C9A84C;
+  --brand-rgb:      201, 168, 76;
+
+  /* Fond et surfaces — thème clair */
+  --cl-bg:          #F4F2EE;  /* fond général de la page */
+  --cl-surface:     #ffffff;  /* fond des cartes et modales */
+  --cl-surface-2:   #FAFAF8;  /* fond secondaire (sidebar, inputs) */
+  --cl-surface-3:   #F4F2EE;  /* fond tertiaire (metric cards) */
+
+  /* Texte — thème clair */
+  --cl-text:        #111111;  /* texte principal */
+  --cl-text-2:      #555555;  /* texte secondaire (labels, sous-titres) */
+  --cl-text-3:      #999999;  /* texte tertiaire (hints, placeholders) */
+
+  /* Bordures */
+  --cl-border:      #E2DDD4;  /* bordure par défaut */
+  --cl-border-strong: #CCCCCC; /* bordure plus visible */
+
+  /* Couleurs sémantiques */
+  --cl-success:     #059669;
+  --cl-success-bg:  #ECFDF5;
+  --cl-error:       #DC2626;
+  --cl-error-bg:    #FEF2F2;
+  --cl-warning:     #D97706;
+  --cl-warning-bg:  #FFFBEB;
+
+  /* Topbar (fond noir fixe même en mode clair) */
+  --cl-topbar-bg:   #0A0A0A;
+  --cl-topbar-text: rgba(255,255,255,0.9);
+
+  /* Sidebar */
+  --cl-sidebar-bg:  #ffffff;
+
+  /* Rayons */
+  --r-sm: 0.5rem;
+  --r-md: 0.75rem;
+  --r-lg: 1rem;
+}
+
+/* ── Thème sombre ── */
+/* Affecte : toute l'interface quand data-theme="dark" est posé sur <html> */
+[data-theme="dark"] {
+  --cl-bg:        #0F0F0F;
+  --cl-surface:   #1A1A1A;
+  --cl-surface-2: #222222;
+  --cl-surface-3: #2A2A2A;
+  --cl-text:      #F0EFEC;
+  --cl-text-2:    #AAAAAA;
+  --cl-text-3:    #666666;
+  --cl-border:    #2E2E2E;
+  --cl-border-strong: #444444;
+  --cl-sidebar-bg: #141414;
+}
+
+/* ═══════════════════════════════════════════════════════════
+   RESET & BASE
+═══════════════════════════════════════════════════════════ */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+html { font-size: 16px; scroll-behavior: smooth; }
+body {
+  font-family: 'Plus Jakarta Sans', sans-serif;
+  /* Couleur du texte par défaut — affecte tout le corps du document */
+  color: var(--cl-text);
+  background: var(--cl-bg);
+  -webkit-font-smoothing: antialiased;
+  line-height: 1.6;
+}
+a { text-decoration: none; color: inherit; }
+button { cursor: pointer; font-family: inherit; }
+input, select, textarea { font-family: inherit; }
+img { display: block; max-width: 100%; }
+* { scrollbar-width: thin; scrollbar-color: var(--cl-border) transparent; }
+*::-webkit-scrollbar { width: 4px; }
+*::-webkit-scrollbar-thumb { background: var(--cl-border); border-radius: 4px; }
+
+/* ═══════════════════════════════════════════════════════════
+   PAGE DE CONNEXION
+   Affecte : écran de login avant authentification
+═══════════════════════════════════════════════════════════ */
+.cl-login-wrap {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--cl-bg);
+  padding: 1.5rem;
+}
+
+.cl-login-box {
+  width: 100%;
+  max-width: 24rem;
+  background: var(--cl-surface);
+  border: 0.5px solid var(--cl-border);
+  border-radius: var(--r-lg);
+  padding: 2rem;
+}
+
+.cl-login-brand {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 1.5rem;
+}
+
+/* Emoji lion dans la page login */
+.cl-login-lion { font-size: 1.5rem; }
+
+/* Nom "LionRDV" dans la page login */
+.cl-login-name {
+  /* Taille du nom de marque dans la page login */
+  font-size: 1.25rem;
+  font-weight: 700;
+  color: var(--brand);
+}
+
+/* Titre principal de la page login */
+.cl-login-title {
+  /* Taille du titre "Espace propriétaire" */
+  font-size: 1.375rem;
+  font-weight: 700;
+  color: var(--cl-text);
+  margin-bottom: 0.4rem;
+}
+
+/* Sous-titre de la page login */
+.cl-login-sub {
+  /* Taille du sous-titre explicatif */
+  font-size: 1rem;
+  color: var(--cl-text-2);
+  margin-bottom: 1.25rem;
+}
+
+.cl-login-form { display: flex; flex-direction: column; gap: 1rem; }
+
+/* Footer de la page login */
+.cl-login-footer {
+  /* Taille du texte "Propulsé par LionTech" */
+  font-size: 1rem;
+  color: var(--cl-text-3);
+  text-align: center;
+  margin-top: 1.25rem;
+}
+
+/* ═══════════════════════════════════════════════════════════
+   ONBOARDING (configuration initiale en 5 étapes)
+   Affecte : écran plein après première connexion
+═══════════════════════════════════════════════════════════ */
+.cl-onboard-wrap {
+  min-height: 100vh;
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  background: var(--cl-bg);
+  padding: 2rem 1rem;
+}
+
+.cl-onboard-box {
+  width: 100%;
+  max-width: 36rem;
+  background: var(--cl-surface);
+  border: 0.5px solid var(--cl-border);
+  border-radius: var(--r-lg);
+  padding: 2rem;
+}
+
+/* Indicateur de progression des étapes */
+.cl-onboard-steps {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0;
+  margin-bottom: 2rem;
+  flex-wrap: wrap;
+}
+
+.cl-ob-step {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+/* Cercle de chaque étape */
+.cl-ob-dot {
+  width: 2rem;
+  height: 2rem;
+  border-radius: 50%;
+  background: var(--cl-surface-3);
+  border: 2px solid var(--cl-border);
+  /* Taille du numéro dans le cercle d'étape */
+  font-size: 1rem;
+  font-weight: 700;
+  color: var(--cl-text-3);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s;
+}
+
+/* Étape active */
+.cl-ob-step.active .cl-ob-dot {
+  background: var(--brand);
+  border-color: var(--brand);
+  color: #0A0A0A;
+}
+
+/* Étape complétée */
+.cl-ob-step.done .cl-ob-dot {
+  background: var(--cl-success);
+  border-color: var(--cl-success);
+  color: #fff;
+}
+
+/* Label sous le cercle d'étape */
+.cl-ob-lbl {
+  /* Taille du label d'étape (Mot de passe, Disponibilités...) */
+  font-size: 1rem;
+  color: var(--cl-text-3);
+  white-space: nowrap;
+}
+.cl-ob-step.active .cl-ob-lbl { color: var(--cl-text); font-weight: 600; }
+.cl-ob-step.done .cl-ob-lbl   { color: var(--cl-success); }
+
+/* Ligne entre les étapes */
+.cl-ob-line {
+  width: 2rem;
+  height: 2px;
+  background: var(--cl-border);
+  margin: 0 0.25rem;
+  margin-bottom: 1.35rem;
+  transition: background 0.2s;
+}
+.cl-ob-line.done { background: var(--cl-success); }
+
+/* Contenu d'une étape */
+.cl-ob-content { display: flex; flex-direction: column; gap: 1rem; }
+
+/* Icône emoji en haut du contenu */
+.cl-ob-icon { font-size: 2.5rem; text-align: center; }
+
+/* Titre de l'étape d'onboarding */
+.cl-ob-title {
+  /* Taille du titre de chaque étape */
+  font-size: 1.25rem;
+  font-weight: 700;
+  color: var(--cl-text);
+  text-align: center;
+}
+
+/* Description de l'étape */
+.cl-ob-sub {
+  /* Taille du texte descriptif de l'étape */
+  font-size: 1rem;
+  color: var(--cl-text-2);
+  text-align: center;
+  line-height: 1.65;
+}
+
+.cl-ob-form { display: flex; flex-direction: column; gap: 1rem; }
+
+/* Barre de force du mot de passe */
+.cl-pwd-bar {
+  height: 4px;
+  border-radius: 2px;
+  background: var(--cl-border);
+  overflow: hidden;
+  margin-top: 0.35rem;
+}
+.cl-pwd-fill {
+  height: 100%;
+  border-radius: 2px;
+  width: 0%;
+  transition: width 0.3s, background 0.3s;
+}
+
+/* Texte d'indication de force */
+.cl-pwd-hint {
+  /* Taille de l'indicateur "Trop court / Moyen / Fort" */
+  font-size: 1rem;
+  color: var(--cl-text-3);
+  margin-top: 0.2rem;
+}
+
+/* Zone d'upload galerie */
+.cl-gallery-upload-zone {
+  border: 2px dashed var(--brand);
+  border-radius: var(--r-md);
+  padding: 2rem;
+  text-align: center;
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.75rem;
+  transition: background 0.15s;
+}
+.cl-gallery-upload-zone:hover { background: rgba(var(--brand-rgb),0.05); }
+
+/* Titre dans la zone d'upload */
+.cl-guz-title {
+  /* Taille du titre de la zone d'upload */
+  font-size: 1rem;
+  font-weight: 600;
+  color: var(--cl-text);
+}
+
+/* Sous-titre dans la zone d'upload */
+.cl-guz-sub {
+  /* Taille du texte de format accepté */
+  font-size: 1rem;
+  color: var(--cl-text-3);
+}
+
+/* Grille de prévisualisation galerie (onboarding) */
+.cl-gal-preview-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 0.5rem;
+  margin-top: 0.75rem;
+}
+.cl-gal-preview-item {
+  aspect-ratio: 1;
+  border-radius: var(--r-sm);
+  overflow: hidden;
+}
+.cl-gal-preview-item img { width: 100%; height: 100%; object-fit: cover; }
+
+/* Upload avatar */
+.cl-avatar-upload {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.75rem;
+  cursor: pointer;
+  padding: 1.25rem;
+  border-radius: var(--r-md);
+  background: var(--cl-surface-3);
+  transition: background 0.15s;
+}
+.cl-avatar-upload:hover { background: var(--cl-surface-2); }
+
+.cl-avatar-circle {
+  width: 5rem;
+  height: 5rem;
+  border-radius: 50%;
+  background: var(--brand);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  /* Taille des initiales dans l'avatar */
+  font-size: 1.75rem;
+  font-weight: 700;
+  color: #0A0A0A;
+  border: 3px solid var(--brand);
+  overflow: hidden;
+  position: relative;
+}
+.cl-avatar-circle img { width: 100%; height: 100%; object-fit: cover; }
+
+/* Texte d'aide sous l'avatar */
+.cl-avatar-hint {
+  /* Taille du texte "Cliquez pour changer votre photo" */
+  font-size: 1rem;
+  color: var(--cl-text-2);
+}
+
+/* ═══════════════════════════════════════════════════════════
+   LAYOUT PRINCIPAL (sidebar + topbar + main)
+   Affecte : structure globale du dashboard après connexion
+═══════════════════════════════════════════════════════════ */
+.cl-app {
+  display: grid;
+  grid-template-columns: 13.75rem 1fr;
+  grid-template-rows: auto 1fr;
+  min-height: 100vh;
+}
+
+/* ── SIDEBAR ── */
+/* Affecte : panneau de navigation gauche */
+.cl-sidebar {
+  grid-row: 1 / -1;
+  background: var(--cl-sidebar-bg);
+  border-right: 0.5px solid var(--cl-border);
+  display: flex;
+  flex-direction: column;
+  padding: 1rem 0.5rem;
+  position: sticky;
+  top: 0;
+  height: 100vh;
+  overflow-y: auto;
+}
+
+/* Bloc brand/avatar en haut du sidebar */
+.cl-sb-brand {
+  display: flex;
+  align-items: center;
+  gap: 0.625rem;
+  padding: 0.75rem 0.75rem 1rem;
+  border-bottom: 0.5px solid var(--cl-border);
+  margin-bottom: 0.75rem;
+}
+
+/* Cercle avatar dans le sidebar */
+.cl-sb-avatar {
+  width: 2.25rem;
+  height: 2.25rem;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  /* Taille des initiales dans le sidebar */
+  font-size: 1rem;
+  font-weight: 700;
+  color: #0A0A0A;
+  flex-shrink: 0;
+  overflow: hidden;
+}
+.cl-sb-avatar img { width: 100%; height: 100%; object-fit: cover; }
+
+/* Nom du commerce dans le sidebar */
+.cl-sb-name {
+  /* Taille du nom du business dans la sidebar */
+  font-size: 1rem;
+  font-weight: 700;
+  color: var(--cl-text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Plan d'abonnement dans le sidebar */
+.cl-sb-plan {
+  /* Taille du label de plan (Basic, Standard, Premium) */
+  font-size: 1rem;
+  color: var(--brand);
+  font-weight: 500;
+}
+
+/* Navigation du sidebar */
+.cl-nav { display: flex; flex-direction: column; flex: 1; gap: 0.15rem; }
+
+/* Titre de section dans le sidebar */
+.cl-nav-section {
+  /* Taille des en-têtes de section du sidebar (Principal, Gestion, Compte) */
+  font-size: 1rem;
+  font-weight: 600;
+  color: var(--cl-text-3);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  padding: 0.5rem 0.75rem 0.25rem;
+  margin-top: 0.5rem;
+}
+
+/* Item de navigation */
+.cl-nav-item {
+  display: flex;
+  align-items: center;
+  gap: 0.625rem;
+  padding: 0.5rem 0.75rem;
+  border-radius: var(--r-sm);
+  /* Taille du texte des items de navigation */
+  font-size: 1rem;
+  color: var(--cl-text-2);
+  background: transparent;
+  border: none;
+  width: 100%;
+  text-align: left;
+  transition: background 0.12s, color 0.12s;
+}
+.cl-nav-item:hover { background: var(--cl-surface-3); color: var(--cl-text); }
+
+/* Item actif */
+.cl-nav-item.active {
+  background: rgba(var(--brand-rgb), 0.1);
+  color: var(--cl-text);
+  font-weight: 600;
+}
+
+/* Icône SVG dans le nav */
+.cl-nav-ico {
+  width: 1rem;
+  height: 1rem;
+  stroke: currentColor;
+  fill: none;
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  flex-shrink: 0;
+}
+
+/* Badge compteur (ex: 3 RDV) */
+.cl-nav-badge {
+  margin-left: auto;
+  min-width: 1.25rem;
+  height: 1.25rem;
+  border-radius: 0.625rem;
+  background: #E74C3C;
+  /* Taille du compteur dans le badge */
+  font-size: 1rem;
+  font-weight: 700;
+  color: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 0.25rem;
+}
+
+/* Séparateur horizontal dans le sidebar */
+.cl-nav-sep {
+  height: 0.5px;
+  background: var(--cl-border);
+  margin: 0.5rem 0.5rem;
+}
+
+/* Bouton de déconnexion (dans le nav) */
+.cl-nav-logout {
+  color: var(--cl-text-3);
+  margin-top: auto;
+}
+.cl-nav-logout:hover { color: #E74C3C; background: var(--cl-error-bg); }
+
+/* ── TOPBAR ── */
+/* Affecte : barre supérieure horizontale (mobile principalement) */
+.cl-topbar {
+  grid-column: 2;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 1.25rem;
+  height: 3.25rem;
+  background: var(--cl-surface);
+  border-bottom: 0.5px solid var(--cl-border);
+  position: sticky;
+  top: 0;
+  z-index: 10;
+}
+
+/* Bouton hamburger mobile */
+.cl-menu-btn {
+  display: none;
+  background: transparent;
+  border: none;
+  padding: 0.35rem;
+  border-radius: var(--r-sm);
+}
+
+/* Titre de la page courante dans la topbar */
+.cl-topbar-title {
+  /* Taille du titre de page dans la topbar */
+  font-size: 1rem;
+  font-weight: 600;
+  color: var(--cl-text);
+}
+
+.cl-topbar-r { display: flex; align-items: center; gap: 0.5rem; }
+
+/* Boutons FR/EN dans la topbar */
+.cl-lang-btn {
+  padding: 0.25rem 0.625rem;
+  border: 0.5px solid var(--cl-border);
+  border-radius: 0.375rem;
+  /* Taille du texte FR/EN */
+  font-size: 1rem;
+  font-weight: 600;
+  color: var(--cl-text-2);
+  background: transparent;
+  transition: all 0.12s;
+}
+.cl-lang-btn.on {
+  border-color: var(--brand);
+  color: var(--brand);
+  background: rgba(var(--brand-rgb), 0.08);
+}
+
+/* Bouton "Voir ma page" dans la topbar */
+.cl-view-page-btn {
+  display: flex;
+  align-items: center;
+  padding: 0.35rem 0.625rem;
+  border: 0.5px solid var(--cl-border);
+  border-radius: var(--r-sm);
+  color: var(--cl-text-2);
+  transition: all 0.12s;
+}
+.cl-view-page-btn:hover { border-color: var(--brand); color: var(--brand); }
+
+/* ── MAIN CONTENT ── */
+/* Affecte : zone de contenu principale à droite du sidebar */
+.cl-main {
+  grid-column: 2;
+  overflow-y: auto;
+  background: var(--cl-bg);
+  padding: 1.5rem;
+  min-height: 0;
+}
+
+/* ═══════════════════════════════════════════════════════════
+   PAGES (sections du dashboard)
+   Affecte : chaque page individuelle (Dashboard, RDV, etc.)
+═══════════════════════════════════════════════════════════ */
+.cl-page { }
+.cl-page.hidden { display: none; }
+
+/* En-tête de page */
+.cl-page-header { margin-bottom: 1.25rem; }
+
+/* Titre principal de chaque page */
+.cl-page-title {
+  /* Taille du titre H1 de chaque page du dashboard */
+  font-size: 1.375rem;
+  font-weight: 700;
+  color: var(--cl-text);
+  margin-bottom: 0.2rem;
+}
+
+/* Sous-titre de la page */
+.cl-page-sub {
+  /* Taille du sous-titre descriptif */
+  font-size: 1rem;
+  color: var(--cl-text-2);
+}
+
+/* ═══════════════════════════════════════════════════════════
+   METRIC CARDS (Dashboard)
+   Affecte : les 4 cartes de statistiques en haut du dashboard
+═══════════════════════════════════════════════════════════ */
+.cl-metrics {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 0.75rem;
+  margin-bottom: 1.25rem;
+}
+
+.cl-metric {
+  background: var(--cl-surface-3);
+  border-radius: var(--r-md);
+  padding: 1rem;
+}
+
+/* Label de la métrique (ex: "RDV ce mois") */
+.cl-metric-lbl {
+  /* Taille du label au-dessus de la valeur */
+  font-size: 1rem;
+  color: var(--cl-text-2);
+  margin-bottom: 0.4rem;
+}
+
+/* Valeur principale de la métrique */
+.cl-metric-val {
+  /* Taille de la valeur chiffrée de la métrique */
+  font-size: 1.5rem;
+  font-weight: 700;
+  color: var(--cl-text);
+  margin-bottom: 0.2rem;
+}
+
+/* Sous-texte (tendance) */
+.cl-metric-sub {
+  /* Taille du texte de tendance (↑ +12%) */
+  font-size: 1rem;
+  color: var(--cl-text-3);
+}
+.cl-metric-up { color: var(--cl-success) !important; }
+.cl-metric-dn { color: var(--cl-error)   !important; }
+
+/* ═══════════════════════════════════════════════════════════
+   CARDS GÉNÉRIQUES
+   Affecte : toutes les cartes blanches avec bordure
+═══════════════════════════════════════════════════════════ */
+.cl-card {
+  background: var(--cl-surface);
+  border: 0.5px solid var(--cl-border);
+  border-radius: var(--r-lg);
+  padding: 1.25rem;
+  margin-bottom: 1rem;
+}
+
+/* En-tête de carte */
+.cl-card-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 1rem;
+}
+
+/* Titre dans une carte */
+.cl-card-title {
+  /* Taille du titre d'une carte */
+  font-size: 1rem;
+  font-weight: 600;
+  color: var(--cl-text);
+}
+
+/* Lien d'action dans une carte (ex: "Voir tout") */
+.cl-card-action {
+  /* Taille du lien d'action */
+  font-size: 1rem;
+  color: var(--brand);
+  font-weight: 500;
+  cursor: pointer;
+  background: transparent;
+  border: none;
+  padding: 0;
+}
+
+/* Grille du dashboard (2 colonnes) */
+.cl-dash-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1rem;
+  margin-bottom: 1rem;
+}
+
+/* ── Mini chart barres ── */
+/* Affecte : graphique de barres de la semaine sur le dashboard */
+.cl-mini-chart {
+  display: flex;
+  align-items: flex-end;
+  gap: 0.3rem;
+  height: 5rem;
+  padding: 0 0.25rem;
+}
+.cl-bar-wrap {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.25rem;
+}
+.cl-bar {
+  width: 100%;
+  border-radius: 0.25rem 0.25rem 0 0;
+  background: var(--brand);
+  min-height: 4px;
+  transition: height 0.3s;
+}
+
+/* Label sous les barres (Lun, Mar...) */
+.cl-bar-lbl {
+  /* Taille des labels des jours sous les barres */
+  font-size: 1rem;
+  color: var(--cl-text-3);
+}
+
+/* ── Upcoming items (dashboard + page À venir) ── */
+/* Affecte : items de liste des prochains RDV */
+.cl-upcoming-item {
+  display: flex;
+  align-items: center;
+  gap: 0.625rem;
+  padding: 0.5rem 0;
+  border-bottom: 0.5px solid var(--cl-border);
+}
+.cl-upcoming-item:last-child { border: none; }
+
+.cl-up-dot {
+  width: 0.5rem;
+  height: 0.5rem;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.cl-up-info { flex: 1; min-width: 0; }
+
+/* Nom du client dans les RDV à venir */
+.cl-up-nm {
+  /* Taille du nom client */
+  font-size: 1rem;
+  font-weight: 500;
+  color: var(--cl-text);
+}
+
+/* Service dans les RDV à venir */
+.cl-up-svc {
+  /* Taille du service */
+  font-size: 1rem;
+  color: var(--cl-text-2);
+}
+
+/* Heure du RDV */
+.cl-up-time {
+  /* Taille de l'heure */
+  font-size: 1rem;
+  color: var(--cl-text-2);
+  white-space: nowrap;
+}
+
+/* ── Services stats (dashboard) ── */
+.cl-svc-stat-row {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.5rem 0;
+  border-bottom: 0.5px solid var(--cl-border);
+}
+.cl-svc-stat-row:last-child { border: none; }
+
+.cl-svc-bar-accent {
+  width: 3px;
+  height: 1.375rem;
+  border-radius: 2px;
+  flex-shrink: 0;
+}
+
+/* Nom du service dans les stats */
+.cl-svc-stat-nm {
+  /* Taille du nom de service dans le dashboard */
+  font-size: 1rem;
+  color: var(--cl-text);
+  flex: 1;
+}
+
+/* Durée du service */
+.cl-svc-stat-dur {
+  /* Taille de la durée */
+  font-size: 1rem;
+  color: var(--cl-text-2);
+}
+
+/* Prix du service */
+.cl-svc-stat-pr {
+  /* Taille du prix dans les stats */
+  font-size: 1rem;
+  font-weight: 600;
+  color: var(--cl-text);
+}
+
+/* ═══════════════════════════════════════════════════════════
+   PAGE MES RDV — Liste des rendez-vous
+   Affecte : chaque ligne de rendez-vous dans la liste
+═══════════════════════════════════════════════════════════ */
+.cl-rdv-filters {
+  display: flex;
+  gap: 0.4rem;
+  margin-bottom: 1rem;
+  flex-wrap: wrap;
+}
+
+/* Boutons de filtre */
+.cl-filter-btn {
+  padding: 0.3rem 0.875rem;
+  border-radius: 1.25rem;
+  border: 0.5px solid var(--cl-border);
+  /* Taille des boutons de filtre */
+  font-size: 1rem;
+  color: var(--cl-text-2);
+  background: transparent;
+  transition: all 0.12s;
+}
+.cl-filter-btn.active {
+  background: var(--cl-text);
+  color: var(--cl-surface);
+  border-color: var(--cl-text);
+}
+
+.cl-rdv-item {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.75rem 0;
+  border-bottom: 0.5px solid var(--cl-border);
+  flex-wrap: wrap;
+}
+.cl-rdv-item:last-child { border: none; }
+
+/* Bloc date (jour + mois) */
+.cl-rdv-date {
+  width: 2.75rem;
+  height: 2.75rem;
+  border-radius: var(--r-sm);
+  background: rgba(var(--brand-rgb), 0.1);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+/* Numéro du jour */
+.cl-rdv-day {
+  /* Taille du numéro du jour dans le bloc date */
+  font-size: 1.125rem;
+  font-weight: 700;
+  color: var(--brand);
+  line-height: 1;
+}
+
+/* Abréviation du mois */
+.cl-rdv-mon {
+  /* Taille de l'abréviation du mois */
+  font-size: 1rem;
+  font-weight: 600;
+  color: var(--brand);
+  text-transform: uppercase;
+  opacity: 0.8;
+}
+
+.cl-rdv-info { flex: 1; min-width: 0; }
+
+/* Nom du client dans la liste RDV */
+.cl-rdv-name {
+  /* Taille du nom client dans la liste */
+  font-size: 1rem;
+  font-weight: 500;
+  color: var(--cl-text);
+}
+
+/* Service + durée + prix */
+.cl-rdv-svc {
+  /* Taille du texte service/durée/prix */
+  font-size: 1rem;
+  color: var(--cl-text-2);
+}
+
+/* Heure du RDV */
+.cl-rdv-time {
+  /* Taille de l'heure dans la liste */
+  font-size: 1rem;
+  color: var(--cl-text-2);
+  white-space: nowrap;
+}
+
+/* Badge de statut */
+.cl-rdv-badge {
+  padding: 0.2rem 0.625rem;
+  border-radius: 1.25rem;
+  /* Taille du badge de statut */
+  font-size: 1rem;
+  font-weight: 600;
+  white-space: nowrap;
+}
+.cl-rdv-badge.ok     { background: var(--cl-success-bg); color: var(--cl-success); }
+.cl-rdv-badge.cancel { background: var(--cl-error-bg);   color: var(--cl-error);   }
+.cl-rdv-badge.done   { background: var(--cl-surface-3);  color: var(--cl-text-2);  }
+
+.cl-rdv-actions { display: flex; gap: 0.3rem; }
+
+/* Boutons d'action sur chaque RDV */
+.cl-rdv-btn {
+  padding: 0.25rem 0.625rem;
+  border-radius: 0.375rem;
+  /* Taille du texte des boutons d'action */
+  font-size: 1rem;
+  font-weight: 600;
+  border: 0.5px solid var(--cl-border);
+  background: transparent;
+  color: var(--cl-text-2);
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.2rem;
+  text-decoration: none;
+}
+.cl-rdv-wa     { background: #25D366; color: #fff; border-color: #25D366; }
+.cl-rdv-cancel { color: var(--cl-error); border-color: #FECACA; }
+.cl-rdv-cancel:hover { background: var(--cl-error-bg); }
+
+/* Séparateur de date dans la page "À venir" */
+.cl-upcoming-date-sep {
+  /* Taille des séparateurs de date */
+  font-size: 1rem;
+  font-weight: 700;
+  color: var(--cl-text-2);
+  text-transform: capitalize;
+  margin: 1rem 0 0.5rem;
+  padding-bottom: 0.4rem;
+  border-bottom: 0.5px solid var(--cl-border);
+}
+
+/* ═══════════════════════════════════════════════════════════
+   PAGE WHATSAPP — Messages pré-rédigés
+   Affecte : cartes de templates de messages
+═══════════════════════════════════════════════════════════ */
+.cl-wa-card {
+  background: var(--cl-surface-3);
+  border: 0.5px solid var(--cl-border);
+  border-radius: var(--r-md);
+  padding: 1rem;
+  margin-bottom: 0.75rem;
+  cursor: pointer;
+  transition: border-color 0.15s;
+}
+.cl-wa-card:hover { border-color: #25D366; }
+
+.cl-wa-head {
+  display: flex;
+  align-items: center;
+  gap: 0.625rem;
+  margin-bottom: 0.5rem;
+}
+
+/* Emoji icône du template */
+.cl-wa-ico { font-size: 1.25rem; }
+
+/* Nom du template WhatsApp */
+.cl-wa-nm {
+  /* Taille du nom du modèle */
+  font-size: 1rem;
+  font-weight: 600;
+  color: var(--cl-text);
+}
+
+/* Texte du message */
+.cl-wa-msg {
+  /* Taille du texte du message pré-rédigé */
+  font-size: 1rem;
+  color: var(--cl-text-2);
+  line-height: 1.6;
+  margin-bottom: 0.75rem;
+}
+
+/* Bouton envoyer WhatsApp */
+.cl-wa-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.5rem 1rem;
+  background: #25D366;
+  color: #fff;
+  border: none;
+  border-radius: 0.375rem;
+  /* Taille du texte du bouton WhatsApp */
+  font-size: 1rem;
+  font-weight: 700;
+  text-decoration: none;
+  transition: filter 0.15s;
+}
+.cl-wa-btn:hover { filter: brightness(1.08); }
+
+/* ═══════════════════════════════════════════════════════════
+   PAGE DISPONIBILITÉS — Horaires par jour
+   Affecte : chaque ligne de jour avec toggle
+═══════════════════════════════════════════════════════════ */
+.cl-day-row {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.625rem 0.875rem;
+  background: var(--cl-surface-3);
+  border-radius: var(--r-sm);
+  margin-bottom: 0.5rem;
+}
+
+/* Toggle de jour (checkbox visuelle) */
+.cl-day-tog {
+  position: relative;
+  display: inline-block;
+  width: 2.125rem;
+  height: 1.125rem;
+  flex-shrink: 0;
+}
+.cl-day-tog input { display: none; }
+.cl-day-knob {
+  position: absolute;
+  inset: 0;
+  border-radius: 0.625rem;
+  background: var(--cl-border-strong);
+  cursor: pointer;
+  transition: background 0.15s;
+}
+.cl-day-knob::after {
+  content: '';
+  position: absolute;
+  width: 0.875rem;
+  height: 0.875rem;
+  border-radius: 50%;
+  background: #fff;
+  top: 0.125rem;
+  left: 0.125rem;
+  transition: transform 0.15s;
+}
+.cl-day-tog input:checked + .cl-day-knob { background: var(--brand); }
+.cl-day-tog input:checked + .cl-day-knob::after { transform: translateX(1rem); }
+
+/* Nom du jour */
+.cl-day-nm {
+  /* Taille du nom du jour (Lundi, Mardi...) */
+  font-size: 1rem;
+  font-weight: 600;
+  color: var(--cl-text);
+  width: 5.5rem;
+  flex-shrink: 0;
+  transition: color 0.15s;
+}
+.cl-day-off { color: var(--cl-text-3) !important; }
+
+.cl-day-times { display: flex; align-items: center; gap: 0.4rem; }
+
+/* Champ de temps (input time) */
+.cl-time-inp {
+  height: 1.875rem;
+  border: 0.5px solid var(--cl-border);
+  border-radius: 0.375rem;
+  padding: 0 0.4rem;
+  /* Taille du texte des champs d'heure */
+  font-size: 1rem;
+  color: var(--cl-text);
+  background: var(--cl-surface);
+  width: 5rem;
+  outline: none;
+}
+
+/* Séparateur tiret entre heures */
+.cl-day-sep {
+  /* Taille du tiret "–" */
+  font-size: 1rem;
+  color: var(--cl-text-3);
+}
+
+/* Texte "Fermé" */
+.cl-day-closed {
+  /* Taille du texte Fermé */
+  font-size: 1rem;
+  color: var(--cl-text-3);
+  font-style: italic;
+}
+
+/* ═══════════════════════════════════════════════════════════
+   PAGE SERVICES — Cartes de service modifiables
+   Affecte : chaque service du propriétaire
+═══════════════════════════════════════════════════════════ */
+.cl-svc-card {
+  background: var(--cl-surface-3);
+  border-radius: var(--r-md);
+  padding: 1rem;
+  margin-bottom: 0.75rem;
+  border: 0.5px solid var(--cl-border);
+  transition: opacity 0.2s;
+}
+.cl-svc-inactive { opacity: 0.5; }
+
+/* Ligne couleur + nom + toggle */
+.cl-svc-color-row {
+  display: flex;
+  align-items: center;
+  gap: 0.625rem;
+  margin-bottom: 0.75rem;
+}
+
+.cl-svc-bar-wrap {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+  flex-shrink: 0;
+}
+
+/* Barre de couleur visuelle du service */
+.cl-svc-bar-prev {
+  width: 4px;
+  height: 2rem;
+  border-radius: 2px;
+  flex-shrink: 0;
+}
+
+/* Input color picker pour la couleur de service */
+.cl-clr-sw {
+  width: 1.75rem;
+  height: 1.75rem;
+  border-radius: 0.375rem;
+  border: none;
+  cursor: pointer;
+  padding: 0;
+  flex-shrink: 0;
+}
+
+/* Champ nom du service */
+.cl-svc-nm-inp { flex: 1; }
+
+/* Toggle activer/désactiver le service */
+.cl-svc-tog {
+  position: relative;
+  display: inline-block;
+  width: 2.125rem;
+  height: 1.125rem;
+  flex-shrink: 0;
+}
+.cl-svc-tog input { display: none; }
+.cl-svc-knob {
+  position: absolute;
+  inset: 0;
+  border-radius: 0.625rem;
+  background: var(--cl-border-strong);
+  cursor: pointer;
+  transition: background 0.15s;
+}
+.cl-svc-knob::after {
+  content: '';
+  position: absolute;
+  width: 0.875rem;
+  height: 0.875rem;
+  border-radius: 50%;
+  background: #fff;
+  top: 0.125rem;
+  left: 0.125rem;
+  transition: transform 0.15s;
+}
+.cl-svc-tog input:checked + .cl-svc-knob { background: var(--brand); }
+.cl-svc-tog input:checked + .cl-svc-knob::after { transform: translateX(1rem); }
+
+/* Ligne durée + prix */
+.cl-svc-row2 {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.75rem;
+  margin-bottom: 0.5rem;
+}
+
+/* ═══════════════════════════════════════════════════════════
+   PAGE GALERIE — Grille de photos
+   Affecte : la grille de photos du business
+═══════════════════════════════════════════════════════════ */
+.cl-gal-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 0.625rem;
+}
+
+/* Item de galerie avec photo */
+.cl-gal-item {
+  aspect-ratio: 1;
+  border-radius: var(--r-sm);
+  overflow: hidden;
+  position: relative;
+  background: var(--cl-surface-3);
+}
+.cl-gal-item img { width: 100%; height: 100%; object-fit: cover; }
+
+/* Overlay de suppression */
+.cl-gal-overlay {
+  position: absolute;
+  inset: 0;
+  background: rgba(0,0,0,0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0;
+  transition: opacity 0.15s;
+}
+.cl-gal-item:hover .cl-gal-overlay { opacity: 1; }
+
+/* Bouton supprimer dans l'overlay */
+.cl-gal-del-btn {
+  padding: 0.3rem 0.75rem;
+  background: #E74C3C;
+  color: #fff;
+  border: none;
+  border-radius: 0.375rem;
+  /* Taille du bouton supprimer dans la galerie */
+  font-size: 1rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+/* Case vide d'emplacement disponible */
+.cl-gal-empty {
+  aspect-ratio: 1;
+  border-radius: var(--r-sm);
+  border: 1.5px dashed var(--cl-border);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* ═══════════════════════════════════════════════════════════
+   PAGE PROFIL — Préférences et informations
+   Affecte : page de profil du propriétaire
+═══════════════════════════════════════════════════════════ */
+.cl-profile-prefs {
+  background: var(--cl-surface-3);
+  border-radius: var(--r-md);
+  padding: 1rem;
+  margin-top: 0.75rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.875rem;
+}
+
+.cl-pref-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+/* Label de préférence (Thème sombre, Langue...) */
+.cl-pref-lbl {
+  /* Taille des labels de préférence */
+  font-size: 1rem;
+  color: var(--cl-text);
+}
+
+/* Lien de la page publique dans le profil */
+.cl-public-link {
+  display: flex;
+  align-items: center;
+  gap: 0.625rem;
+  padding: 0.75rem;
+  background: var(--cl-surface-3);
+  border-radius: var(--r-md);
+  margin-top: 0.75rem;
+}
+
+/* URL de la page publique */
+.cl-public-url {
+  flex: 1;
+  /* Taille de l'URL de la page publique */
+  font-size: 1rem;
+  font-weight: 600;
+  color: var(--brand);
+  font-family: monospace;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* ═══════════════════════════════════════════════════════════
+   FORMULAIRE — Champs réutilisables partout
+   Affecte : tous les inputs, selects, textareas
+═══════════════════════════════════════════════════════════ */
+.cl-form-group {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+}
+
+/* Label de champ */
+.cl-label {
+  /* Taille des labels de formulaire */
+  font-size: 1rem;
+  font-weight: 600;
+  color: var(--cl-text-2);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+/* Input principal */
+.cl-input {
+  height: 2.25rem;
+  padding: 0 0.75rem;
+  border: 0.5px solid var(--cl-border);
+  border-radius: var(--r-sm);
+  /* Taille du texte dans les champs */
+  font-size: 1rem;
+  color: var(--cl-text);
+  background: var(--cl-surface);
+  outline: none;
+  width: 100%;
+  transition: border-color 0.15s;
+}
+.cl-input:focus { border-color: var(--brand); }
+.cl-input[readonly] { background: var(--cl-surface-3); }
+
+/* Select */
+.cl-select {
+  height: 2.25rem;
+  padding: 0 0.75rem;
+  border: 0.5px solid var(--cl-border);
+  border-radius: var(--r-sm);
+  /* Taille du texte dans les selects */
+  font-size: 1rem;
+  color: var(--cl-text);
+  background: var(--cl-surface);
+  width: 100%;
+  cursor: pointer;
+  outline: none;
+}
+.cl-select-sm { width: auto; }
+
+/* Champ avec préfixe */
+.cl-prefix-wrap {
+  display: flex;
+  height: 2.25rem;
+  border: 0.5px solid var(--cl-border);
+  border-radius: var(--r-sm);
+  overflow: hidden;
+  transition: border-color 0.15s;
+}
+.cl-prefix-wrap:focus-within { border-color: var(--brand); }
+
+/* Label préfixe (+237) */
+.cl-prefix {
+  padding: 0 0.75rem;
+  background: var(--cl-surface-3);
+  border-right: 0.5px solid var(--cl-border);
+  /* Taille du préfixe (+237) */
+  font-size: 1rem;
+  color: var(--cl-text-2);
+  display: flex;
+  align-items: center;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+.cl-prefix-wrap input {
+  flex: 1;
+  border: none;
+  background: transparent;
+  padding: 0 0.75rem;
+  /* Taille du texte dans le champ préfixé */
+  font-size: 1rem;
+  color: var(--cl-text);
+  outline: none;
+}
+
+/* Toggle général */
+.cl-toggle {
+  position: relative;
+  display: inline-block;
+  width: 2.125rem;
+  height: 1.125rem;
+  flex-shrink: 0;
+}
+.cl-toggle input { display: none; }
+.cl-toggle-knob {
+  position: absolute;
+  inset: 0;
+  border-radius: 0.625rem;
+  background: var(--cl-border-strong);
+  cursor: pointer;
+  transition: background 0.15s;
+}
+.cl-toggle-knob::after {
+  content: '';
+  position: absolute;
+  width: 0.875rem;
+  height: 0.875rem;
+  border-radius: 50%;
+  background: #fff;
+  top: 0.125rem;
+  left: 0.125rem;
+  transition: transform 0.15s;
+}
+.cl-toggle input:checked + .cl-toggle-knob { background: var(--brand); }
+.cl-toggle input:checked + .cl-toggle-knob::after { transform: translateX(1rem); }
+
+/* Ligne toggle (label + toggle) */
+.cl-toggle-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.4rem 0;
+}
+
+/* Label du toggle */
+.cl-toggle-lbl {
+  /* Taille du texte à côté du toggle */
+  font-size: 1rem;
+  color: var(--cl-text);
+}
+
+/* ═══════════════════════════════════════════════════════════
+   BOUTONS
+   Affecte : tous les boutons de l'application
+═══════════════════════════════════════════════════════════ */
+/* Bouton principal (fond brand) */
+.cl-btn-primary {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  padding: 0.625rem 1.25rem;
+  background: var(--brand);
+  color: #0A0A0A;
+  border: none;
+  border-radius: var(--r-sm);
+  /* Taille du texte du bouton principal */
+  font-size: 1rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: filter 0.15s;
+}
+.cl-btn-primary:hover { filter: brightness(1.07); }
+
+/* Bouton secondaire (contour) */
+.cl-btn-secondary {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.5rem 1rem;
+  background: transparent;
+  color: var(--cl-text);
+  border: 0.5px solid var(--cl-border);
+  border-radius: var(--r-sm);
+  /* Taille du texte du bouton secondaire */
+  font-size: 1rem;
+  font-weight: 500;
+  cursor: pointer;
+  text-decoration: none;
+  transition: border-color 0.15s, background 0.15s;
+}
+.cl-btn-secondary:hover { border-color: var(--brand); background: rgba(var(--brand-rgb),0.05); }
+
+/* Modificateur pleine largeur */
+.cl-btn-full { width: 100%; }
+
+/* ═══════════════════════════════════════════════════════════
+   ALERTES
+   Affecte : messages de succès/erreur
+═══════════════════════════════════════════════════════════ */
+.cl-alert {
+  padding: 0.75rem 1rem;
+  border-radius: var(--r-sm);
+  /* Taille du texte dans les alertes */
+  font-size: 1rem;
+  font-weight: 500;
+  margin-bottom: 1rem;
+}
+.cl-alert-error   { background: var(--cl-error-bg);   color: var(--cl-error);   border: 0.5px solid #FECACA; }
+.cl-alert-success { background: var(--cl-success-bg);  color: var(--cl-success); border: 0.5px solid #A7F3D0; }
+
+/* Alerte flottante en haut */
+.cl-alert-floating {
+  position: fixed;
+  top: 1rem;
+  right: 1rem;
+  z-index: 100;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+  max-width: 20rem;
+  transition: opacity 0.4s;
+}
+
+/* État vide */
+.cl-empty-state {
+  padding: 2rem;
+  text-align: center;
+  /* Taille du texte d'état vide */
+  font-size: 1rem;
+  color: var(--cl-text-3);
+  font-style: italic;
+}
+
+/* ═══════════════════════════════════════════════════════════
+   RESPONSIVE MOBILE
+   Affecte : layout sur écrans < 768px
+═══════════════════════════════════════════════════════════ */
+@media (max-width: 768px) {
+  .cl-app {
+    grid-template-columns: 1fr;
+  }
+
+  .cl-sidebar {
+    position: fixed;
+    left: -100%;
+    top: 0;
+    bottom: 0;
+    z-index: 50;
+    width: 14rem;
+    transition: left 0.25s;
+    box-shadow: 4px 0 20px rgba(0,0,0,0.1);
+  }
+  .cl-sidebar.open { left: 0; }
+
+  .cl-topbar { grid-column: 1; }
+  .cl-main   { grid-column: 1; }
+
+  .cl-menu-btn { display: flex; align-items: center; }
+
+  .cl-metrics {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .cl-dash-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .cl-svc-row2 {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 480px) {
+  .cl-metrics { grid-template-columns: 1fr 1fr; }
+  .cl-gal-grid { grid-template-columns: repeat(2, 1fr); }
+}
