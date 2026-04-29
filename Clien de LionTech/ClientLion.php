@@ -301,8 +301,9 @@ if ($logged) {
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title><?= $logged ? h($ownerData['biz_name']).' — ' : '' ?>Mon Espace · LionRDV</title>
-  <link rel="stylesheet" href="clientLion.css">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
+  <link rel="stylesheet" href="ClientLion.css">
+  <link rel="stylesheet" href="<?= BASE_URL ?>/responsive.css">
 </head>
 <body>
 
@@ -582,7 +583,7 @@ $cr = hexdec(substr($col,1,2)); $cg = hexdec(substr($col,3,2)); $cb = hexdec(sub
     <div class="cl-topbar-r">
       <button class="cl-lang-btn <?= $lang_pref==='fr'?'on':'' ?>" onclick="setLang('fr',this)">FR</button>
       <button class="cl-lang-btn <?= $lang_pref==='en'?'on':'' ?>" onclick="setLang('en',this)">EN</button>
-      <a href="/LionRDV/Utilisateur%20du%20client/Utulisateur.php?slug=<?= urlencode($slug) ?>" target="_blank" class="cl-view-page-btn" title="Voir ma page publique">
+      <a href="<?= BASE_URL ?>/Utilisateur%20du%20client/Utulisateur.php?slug=<?= urlencode($slug) ?>" target="_blank" class="cl-view-page-btn" title="Voir ma page publique">
         <svg style="width:1rem;height:1rem;stroke:currentColor;fill:none;stroke-width:2;stroke-linecap:round;" viewBox="0 0 24 24"><path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6M15 3h6v6M10 14L21 3"/></svg>
       </a>
     </div>
@@ -921,7 +922,7 @@ $cr = hexdec(substr($col,1,2)); $cg = hexdec(substr($col,3,2)); $cb = hexdec(sub
         <div class="cl-gal-grid">
           <?php foreach ($gallery as $img): ?>
           <div class="cl-gal-item">
-            <img src="/LionRDV/<?= h($img['path']) ?>" alt="Photo galerie" loading="lazy">
+            <img src="<?= BASE_URL ?>/<?= h($img['path']) ?>" alt="Photo galerie" loading="lazy">
             <div class="cl-gal-overlay">
               <form method="POST" style="display:inline;">
                 <input type="hidden" name="action" value="delete_gallery">
@@ -952,7 +953,7 @@ $cr = hexdec(substr($col,1,2)); $cg = hexdec(substr($col,3,2)); $cb = hexdec(sub
         <div class="cl-avatar-upload" onclick="document.getElementById('av-main-inp').click()">
           <div class="cl-avatar-circle" style="background:<?= h($col) ?>;">
             <?php if (!empty($ownerData['avatar_photo'])): ?>
-            <img src="/LionRDV/<?= h($ownerData['avatar_photo']) ?>" alt="Avatar" id="av-main-img">
+            <img src="<?= BASE_URL ?>/<?= h($ownerData['avatar_photo']) ?>" alt="Avatar" id="av-main-img">
             <?php else: ?>
             <span id="av-main-initials"><?= h($ownerData['initials']) ?></span>
             <img id="av-main-img" src="" alt="" style="display:none;">
@@ -993,7 +994,7 @@ $cr = hexdec(substr($col,1,2)); $cg = hexdec(substr($col,3,2)); $cb = hexdec(sub
         <!-- Public page link -->
         <div class="cl-public-link">
           <div class="cl-public-url">lionrdv.cm/<?= h($slug) ?></div>
-          <a href="/LionRDV/Utilisateur%20du%20client/Utulisateur.php?slug=<?= urlencode($slug) ?>" target="_blank" class="cl-btn-secondary">Voir</a>
+          <a href="<?= BASE_URL ?>/Utilisateur%20du%20client/Utulisateur.php?slug=<?= urlencode($slug) ?>" target="_blank" class="cl-btn-secondary">Voir</a>
           <button type="button" class="cl-btn-secondary" onclick="navigator.clipboard.writeText('lionrdv.cm/<?= h($slug) ?>')">Copier</button>
         </div>
         <button type="submit" class="cl-btn-primary" style="margin-top:1rem;">Enregistrer les modifications</button>
@@ -1004,7 +1005,7 @@ $cr = hexdec(substr($col,1,2)); $cg = hexdec(substr($col,3,2)); $cb = hexdec(sub
 </div><!-- /cl-app -->
 <?php endif; ?>
 
-<script src="clientLion.js"></script>
+<script src="ClientLion.js"></script>
 <script>
 /* ── Page navigation ───────────────────────────────────── */
 function goPage(id, navEl) {

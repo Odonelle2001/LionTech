@@ -872,3 +872,50 @@ body {
 /* Hours list — plain span used */
 .cl-hours-row span:first-child { font-weight: 700; color: var(--text-color, #222); }
 .cl-hours-row span:last-child  { font-weight: 600; color: var(--text-color, #222); }
+/* ── Zones de la couverture (overlay items) ────────────────── */
+.cl-hero-zone-centre {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: flex-start;
+  padding: 20px 24px;
+  gap: 6px;
+  z-index: 3;
+  pointer-events: none;
+}
+.cl-hero-zone-bas {
+  position: absolute;
+  left: 0; right: 0; bottom: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+  padding: 10px 16px 14px;
+  z-index: 3;
+  background: linear-gradient(to top, rgba(0,0,0,0.55), transparent);
+}
+.cl-hero-zone-centre > *, .cl-hero-zone-bas > * { pointer-events: auto; }
+
+.cl-hero-name { color:#fff; font-weight:800; font-size:1.6rem; line-height:1.15; text-shadow:0 1px 4px rgba(0,0,0,0.5); }
+.cl-hero-type { color:#f5f5f5; font-weight:600; font-size:0.95rem; text-shadow:0 1px 3px rgba(0,0,0,0.5); }
+.cl-hero-addr { color:#f0f0f0; font-size:0.875rem; text-shadow:0 1px 3px rgba(0,0,0,0.5); }
+.cl-hero-addr i { margin-right:4px; opacity:.85; }
+.cl-hero-wa {
+  display:inline-flex; align-items:center; gap:6px;
+  background:#25D366; color:#fff; padding:5px 10px;
+  border-radius:999px; font-size:0.8rem; font-weight:700;
+  text-decoration:none; box-shadow:0 2px 6px rgba(0,0,0,0.25);
+}
+.cl-hero-wa i { font-size:0.95rem; }
+
+/* Quand un item est dans la zone "bas", on réduit légèrement */
+.cl-hero-zone-bas .cl-hero-name { font-size: 1.15rem; }
+.cl-hero-zone-bas .cl-hero-type,
+.cl-hero-zone-bas .cl-hero-addr { font-size: 0.8rem; }
+
+@media (max-width: 480px) {
+  .cl-hero-zone-centre { padding: 14px 16px; }
+  .cl-hero-name { font-size: 1.3rem; }
+}

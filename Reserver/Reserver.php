@@ -9,7 +9,8 @@
    - localStorage côté client pour retrouver le RDV sans internet
 ============================================================ */
 
-$data_dir = 'C:/Xampp/htdocs/LionRDV/data';
+require_once __DIR__ . '/../config.php';
+$data_dir = DATA_DIR;
 $slug     = preg_replace('/[^a-z0-9\-]/', '', strtolower($_GET['slug'] ?? ''));
 
 if (empty($slug)) {
@@ -260,8 +261,9 @@ $default_lang = $b['language'] === 'en' ? 'en' : 'fr';
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Réserver — <?= htmlspecialchars($b['name']) ?></title>
-  <link rel="stylesheet" href="reserver.css">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
+  <link rel="stylesheet" href="Reserver.css">
+  <link rel="stylesheet" href="<?= BASE_URL ?>/responsive.css">
   <style>
     :root {
       --brand:      <?= htmlspecialchars($b['theme_color']) ?>;
@@ -280,8 +282,8 @@ $default_lang = $b['language'] === 'en' ? 'en' : 'fr';
 <nav class="rsv-nav">
   <div class="rsv-nav-inner">
     <div class="rsv-nav-left">
-      <?php if (!empty($b['logo']) && file_exists('C:/Xampp/htdocs/LionRDV/' . $b['logo'])): ?>
-        <img src="<?= htmlspecialchars($b['logo']) ?>" class="rsv-nav-logo" alt="logo">
+      <?php if (!empty($b['logo']) && media_exists($b['logo'])): ?>
+        <img src="<?= BASE_URL ?>/<?= htmlspecialchars(ltrim($b['logo'], '/')) ?>" class="rsv-nav-logo" alt="logo">
       <?php else: ?>
         <div class="rsv-nav-init" style="background:var(--brand);">
           <?= htmlspecialchars($b['initials']) ?>
@@ -294,7 +296,7 @@ $default_lang = $b['language'] === 'en' ? 'en' : 'fr';
              data-en="Book an appointment">Prendre un rendez-vous</div>
       </div>
     </div>
-    <a href="/LionRDV/Utilisateur%20du%20client/Utulisateur.php?slug=<?= urlencode($slug) ?>" class="rsv-back-btn">
+    <a href="<?= BASE_URL ?>/Utilisateur%20du%20client/Utulisateur.php?slug=<?= urlencode($slug) ?>" class="rsv-back-btn">
       <i class="fa-solid fa-arrow-left"></i>
       <span data-fr="Retour" data-en="Back">Retour</span>
     </a>
@@ -539,6 +541,6 @@ var BIZ = <?= $js_biz ?>;
 var SLUG = <?= json_encode($slug) ?>;
 var DEFAULT_LANG = <?= json_encode($default_lang) ?>;
 </script>
-<script src="reserver.js"></script>
+<script src="Reserver.js"></script>
 </body>
 </html>

@@ -179,9 +179,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['form_submitted'])) {
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Ajouter un business — LionRDV</title>
-  <link rel="stylesheet" href="../sidebar.css">
-  <link rel="stylesheet" href="AjouterBussiness.css">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
+  <link rel="stylesheet" href="<?= BASE_URL ?>/sidebar.css">
+  <link rel="stylesheet" href="AjouterBussiness.css">
+  <link rel="stylesheet" href="<?= BASE_URL ?>/responsive.css">
 </head>
 <body>
 <div class="app-layout">
@@ -193,14 +194,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['form_submitted'])) {
     <header class="ab-topbar">
       <div class="ab-topbar-left">
         <div class="ab-brand">
-          <span class="ab-lion">🦁</span>
-          <span class="ab-brand-name">LionRDV</span>
+          <span class="ab-brand-name">Lion<span class="ab-brand-name-accent">RDV</span></span>
           <span class="ab-brand-badge">by LionTech</span>
         </div>
         <p class="ab-topbar-sub">Créez la page du commerce en quelques minutes</p>
       </div>
       <div class="ab-topbar-actions">
-        <a href="../RSVAdmin.php" class="ab-btn-back">
+        <a href="<?= BASE_URL ?>/RSVAdmin.php" class="ab-btn-back">
           <i class="fa-solid fa-arrow-left"></i> Retour
         </a>
         <button type="submit" form="biz-form" class="ab-btn-create">
@@ -274,17 +274,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['form_submitted'])) {
             </div>
             <div class="ab-lang-grid">
               <label class="ab-lang-opt ab-lang-on">
-                <input type="radio" name="site_language" value="fr" checked>
+                <input type="radio" name="site_language" value="fr" checked onchange="selLang(this,'fr')">
                 <span class="ab-lang-flag">🇫🇷</span>
                 <span class="ab-lang-nm">Français</span>
               </label>
               <label class="ab-lang-opt">
-                <input type="radio" name="site_language" value="en">
+                <input type="radio" name="site_language" value="en" onchange="selLang(this,'en')">
                 <span class="ab-lang-flag">🇬🇧</span>
                 <span class="ab-lang-nm">English</span>
               </label>
               <label class="ab-lang-opt">
-                <input type="radio" name="site_language" value="bilingual">
+                <input type="radio" name="site_language" value="bilingual" onchange="selLang(this,'bilingual')">
                 <span class="ab-lang-flag">🌐</span>
                 <span class="ab-lang-nm">Bilingue (FR)</span>
               </label>
@@ -869,11 +869,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['form_submitted'])) {
             <div class="ab-suc-row">WhatsApp : <strong><?= h($prefill['owner_whatsapp'] ?? '') ?></strong></div>
             <div class="ab-suc-row">Mot de passe : <strong><?= h($prefill['owner_password'] ?? '') ?></strong></div>
             <div class="ab-suc-btns">
-              <a href="/LionRDV/Utilisateur%20du%20client/Utulisateur.php?slug=<?= urlencode($saved_slug) ?>"
+              <a href="<?= BASE_URL ?>/Utilisateur%20du%20client/Utulisateur.php?slug=<?= urlencode($saved_slug) ?>"
                  target="_blank" class="ab-suc-btn ab-suc-dark">
                 <i class="fa-solid fa-eye"></i> Voir la page
               </a>
-              <a href="../RSVAdmin.php" class="ab-suc-btn ab-suc-gold">
+              <a href="<?= BASE_URL ?>/RSVAdmin.php" class="ab-suc-btn ab-suc-gold">
                 <i class="fa-solid fa-arrow-left"></i> Dashboard
               </a>
             </div>
@@ -910,7 +910,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['form_submitted'])) {
           <div class="ab-phone-shell" id="ab-phone-shell">
             <iframe
               id="preview-iframe"
-              src="/LionRDV/Utilisateur%20du%20client/Utulisateur.php?preview=1"
+              src="<?= BASE_URL ?>/Utilisateur%20du%20client/Utulisateur.php?preview=1"
               title="Aperçu live de la page client">
             </iframe>
           </div>
@@ -924,7 +924,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['form_submitted'])) {
   </main>
 </div>
 
-<script src="../RSVAdmin.js"></script>
+<script src="<?= BASE_URL ?>/RSVAdmin.js"></script>
 <script>
 /* ============================================================
    AjouterBussiness.js — Live Preview Engine
@@ -1108,7 +1108,7 @@ function handleAvatar(input) {
   r.readAsDataURL(file);
 }
 
-/* ── Position overlay ── */
+/* ── Position overlay (envoie aussi à l'aperçu) ── */
 function selPos(btn, pos) {
   const row = btn.closest('.ab-ov-pos');
   row.querySelectorAll('.ab-pos-btn').forEach(b => b.classList.remove('ab-pos-on'));
@@ -1116,6 +1116,22 @@ function selPos(btn, pos) {
   const field = btn.dataset.field;
   const inp = document.querySelector('input[name="'+field+'"]');
   if (inp) inp.value = pos;
+  try {
+    iframe.contentWindow.postMessage({ type: 'PREVIEW_OVERLAY_POS', field: field, pos: pos }, '*');
+  } catch(e) {}
+}
+
+/* ── Sélection de la langue (mise à jour live de l'aperçu) ── */
+function selLang(input, lang) {
+  document.querySelectorAll('.ab-lang-opt').forEach(o => o.classList.remove('ab-lang-on'));
+  if (input) {
+    const lbl = input.closest('.ab-lang-opt');
+    if (lbl) lbl.classList.add('ab-lang-on');
+  }
+  try {
+    iframe.contentWindow.postMessage({ type: 'PREVIEW_LANG', lang: lang }, '*');
+  } catch(e) {}
+  sendPreview();
 }
 
 /* ── Police ── */

@@ -1,4 +1,5 @@
 <?php
+require_once __DIR__ . '/config.php';
 $currentPage = 'dashboard';
 ?>
 
@@ -9,15 +10,18 @@ $currentPage = 'dashboard';
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>RSVAdmin</title>
 
-  <!-- Sidebar CSS -->
-  <link rel="stylesheet" href="sidebar.css">
-
-  <!-- Admin Layout CSS -->
-  <link rel="stylesheet" href="RSVAdmin.css">
-
   <!-- Icons -->
   <link rel="stylesheet"
         href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css" />
+
+  <!-- Sidebar CSS -->
+  <link rel="stylesheet" href="<?= BASE_URL ?>/sidebar.css">
+
+  <!-- Admin Layout CSS -->
+  <link rel="stylesheet" href="<?= BASE_URL ?>/RSVAdmin.css">
+
+  <!-- Responsive overlay (doit rester en dernier) -->
+  <link rel="stylesheet" href="<?= BASE_URL ?>/responsive.css">
 </head>
 
 <body>
@@ -182,7 +186,7 @@ $currentPage = 'dashboard';
     </main>
   </div>
 
-  <script src="RSVAdmin.js"></script>
+  <script src="<?= BASE_URL ?>/RSVAdmin.js"></script>
 
 </body>
 </html>

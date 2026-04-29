@@ -72,16 +72,17 @@ $navBg=$biz['navbar_style']==='dark'?$biz['secondary_color']:'#ffffff';
 $navColor=$biz['navbar_style']==='dark'?'#ffffff':$biz['text_color'];
 $footBg=$biz['footer_style']==='dark'?$biz['secondary_color']:'#ffffff';
 $footColor=$biz['footer_style']==='dark'?'rgba(255,255,255,0.7)':'#7A7570';
-$logoSrc=!empty($biz['logo'])?'../'.ltrim($biz['logo'],'/'):'';
-$coverSrc=!empty($biz['cover_photo'])?'../'.ltrim($biz['cover_photo'],'/'):'';
+$logoSrc=!empty($biz['logo'])?BASE_URL.'/'.ltrim($biz['logo'],'/'):'';
+$coverSrc=!empty($biz['cover_photo'])?BASE_URL.'/'.ltrim($biz['cover_photo'],'/'):'';
 ?>
 <!DOCTYPE html>
 <html lang="<?=h($defLang)?>">
 <head>
 <meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0">
 <title><?=h($biz['name'])?> — LionRDV</title>
-<link rel="stylesheet" href="Utulisateur.css">
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
+<link rel="stylesheet" href="Utulisateur.css">
+<link rel="stylesheet" href="<?= BASE_URL ?>/responsive.css">
 <style>
 :root{
   --brand:<?=h($biz['theme_color'])?>;
@@ -134,14 +135,47 @@ a.cl-sticky-btn{width:100%;justify-content:center;}
 </div></div></nav>
 
 <!-- HERO -->
+<?php
+  $ovPos = [
+    'ov_name'     => $biz['ov_name']     ?? 'centre',
+    'ov_type'     => $biz['ov_type']     ?? 'centre',
+    'ov_address'  => $biz['ov_address']  ?? 'centre',
+    'ov_whatsapp' => $biz['ov_whatsapp'] ?? 'centre',
+  ];
+  function ovDisp($p){ return $p==='masqué'||$p==='masque' ? 'display:none;' : ''; }
+  function ovZone($p){ return $p==='bas' ? 'bas' : 'centre'; }
+?>
 <div class="cl-hero<?=$preview?' pc':''?>" id="el-hero"<?=$preview?' data-section="hero" data-hint="Éditer hero"':''?>>
 <?php if($coverSrc): ?><img src="<?=h($coverSrc)?>" alt="<?=h($biz['name'])?>" class="cl-hero-img" id="el-cover-img">
 <?php else: ?><div class="cl-hero-placeholder" style="background:var(--brand);" id="el-hero-ph"><i class="fa-regular fa-image cl-hero-ph-icon"></i><span data-fr="Photo de couverture" data-en="Cover photo">Photo de couverture</span></div><?php endif; ?>
 <div class="cl-hero-overlay"></div>
-<div class="cl-hero-info">
-<div class="cl-hero-name" id="el-hero-name"><?=h($biz['name'])?></div>
-<?php if((float)$biz['rating']>0): ?><div class="cl-hero-rating"><i class="fa-solid fa-star cl-star"></i><span><?=h((string)$biz['rating'])?></span><span class="cl-review-count" data-fr="(<?=(int)$biz['review_count']?> avis)" data-en="(<?=(int)$biz['review_count']?> reviews)">(<?=(int)$biz['review_count']?> avis)</span></div><?php endif; ?>
-</div></div>
+
+<!-- Zone CENTRE de la couverture -->
+<div class="cl-hero-zone cl-hero-zone-centre" id="el-hero-zone-centre">
+  <div class="cl-hero-name" id="el-hero-name" data-overlay="ov_name" style="<?=ovDisp($ovPos['ov_name'])?>"><?=h($biz['name'])?></div>
+  <div class="cl-hero-type" id="el-hero-type" data-overlay="ov_type" style="<?=ovDisp($ovPos['ov_type'])?>"><?=h($biz['type'])?></div>
+  <div class="cl-hero-addr" id="el-hero-addr" data-overlay="ov_address" style="<?=ovDisp($ovPos['ov_address'])?>"><i class="fa-solid fa-location-dot"></i> <?=h($loc)?></div>
+  <a class="cl-hero-wa" id="el-hero-wa" data-overlay="ov_whatsapp" style="<?=ovDisp($ovPos['ov_whatsapp'])?>" href="https://wa.me/<?=preg_replace('/\D/','',$biz['whatsapp'])?>" target="_blank" rel="noopener"><i class="fa-brands fa-whatsapp"></i> <?=h($biz['whatsapp'])?></a>
+  <?php if((float)$biz['rating']>0): ?><div class="cl-hero-rating"><i class="fa-solid fa-star cl-star"></i><span><?=h((string)$biz['rating'])?></span><span class="cl-review-count" data-fr="(<?=(int)$biz['review_count']?> avis)" data-en="(<?=(int)$biz['review_count']?> reviews)">(<?=(int)$biz['review_count']?> avis)</span></div><?php endif; ?>
+</div>
+
+<!-- Zone BAS de la couverture (vide par défaut) -->
+<div class="cl-hero-zone cl-hero-zone-bas" id="el-hero-zone-bas"></div>
+
+<script>
+(function(){
+  /* Au chargement, déplace dans la zone "bas" les éléments configurés ainsi */
+  var initialPos = <?=json_encode($ovPos)?>;
+  var bas = document.getElementById('el-hero-zone-bas');
+  ['ov_name','ov_type','ov_address','ov_whatsapp'].forEach(function(f){
+    if (initialPos[f] === 'bas') {
+      var el = document.querySelector('[data-overlay="'+f+'"]');
+      if (el && bas) bas.appendChild(el);
+    }
+  });
+})();
+</script>
+</div>
 
 <!-- STATUS -->
 <div class="cl-status-bar">
@@ -161,7 +195,7 @@ a.cl-sticky-btn{width:100%;justify-content:center;}
 <div class="cl-rdv-section-sub" data-fr="Choisissez votre créneau en quelques secondes" data-en="Pick your slot in seconds">Choisissez votre créneau en quelques secondes</div>
 </div>
 <?php if(!$preview): ?>
-<a href="/LionRDV/Reserver/reserver.php?slug=<?=urlencode($biz['slug'])?>" class="cl-rdv-btn-inline" style="background:var(--btn-color);" id="el-rdv-btn">
+<a href="<?= BASE_URL ?>/Reserver/Reserver.php?slug=<?=urlencode($biz['slug'])?>" class="cl-rdv-btn-inline" style="background:var(--btn-color);" id="el-rdv-btn">
 <?php else: ?><button class="cl-rdv-btn-inline" style="background:var(--btn-color);" id="el-rdv-btn"><?php endif; ?>
 <i class="fa-regular fa-calendar-check"></i><span data-fr="Prendre un RDV" data-en="Book now">Prendre un RDV</span>
 <?php echo $preview ? '</button>' : '</a>'; ?>
@@ -173,7 +207,7 @@ a.cl-sticky-btn{width:100%;justify-content:center;}
 <div class="cl-gallery">
 <?php if(!empty($gallery)): ?>
 <?php foreach(array_slice($gallery,0,5) as $i=>$p): ?>
-<div class="cl-gallery-item <?=$i===0?'cl-gallery-wide':''?>"><img src="../<?=h($p['path'])?>" alt="<?=h($p['alt_text']??$biz['name'])?>" loading="lazy"></div>
+<div class="cl-gallery-item <?=$i===0?'cl-gallery-wide':''?>"><img src="<?= BASE_URL ?>/<?=h(ltrim($p['path'],'/'))?>" alt="<?=h($p['alt_text']??$biz['name'])?>" loading="lazy"></div>
 <?php endforeach; ?>
 <?php else: ?>
 <div class="cl-gallery-item cl-gallery-wide cl-gallery-ph" style="background:<?=hex_rgba($biz['theme_color'],0.12)?>;"><i class="fa-regular fa-image" style="color:var(--brand);font-size:28px;"></i></div>
@@ -222,7 +256,7 @@ else: foreach($hor_days as [$fr,$op,$cl,$open]): ?>
 <?php if(!empty($services)): ?>
 <div class="cl-services-list" id="el-services-list">
 <?php foreach($services as $svc): ?>
-<div class="cl-service-item"<?=!$preview?' onclick="window.location.href=\'/LionRDV/Reserver/reserver.php?slug='.urlencode($biz['slug']).'\'"':''; ?>>
+<div class="cl-service-item"<?=!$preview?' onclick="window.location.href=\''.BASE_URL.'/Reserver/Reserver.php?slug='.urlencode($biz['slug']).'\'"':''; ?>>
 <div class="cl-svc-bar" style="background:<?=h($svc['color']??$biz['theme_color'])?>"></div>
 <div class="cl-svc-info">
 <div class="cl-svc-name" data-fr="<?=h($svc['name']??'')?>" data-en="<?=h($svc['name_en']??$svc['name']??'')?>"><?=h($svc['name']??'')?></div>
@@ -260,7 +294,7 @@ else: foreach($hor_days as [$fr,$op,$cl,$open]): ?>
 <!-- STICKY -->
 <?php if(!$preview): ?>
 <div class="cl-sticky-rdv">
-<a href="/LionRDV/Reserver/reserver.php?slug=<?=urlencode($biz['slug'])?>" class="cl-sticky-btn" style="background:var(--btn-color);" id="el-sticky">
+<a href="<?= BASE_URL ?>/Reserver/Reserver.php?slug=<?=urlencode($biz['slug'])?>" class="cl-sticky-btn" style="background:var(--btn-color);" id="el-sticky">
 <i class="fa-regular fa-calendar-check"></i><span data-fr="Prendre un RDV" data-en="Book an appointment">Prendre un RDV</span>
 </a></div>
 <?php else: ?>
@@ -449,6 +483,34 @@ if(PREVIEW){
         var nc=document.createElement('img');nc.id='el-cover-img';nc.src=msg.src;nc.className='cl-hero-img';
         if(ph&&ph.parentNode){ph.parentNode.replaceChild(nc,ph);}
         else if(hero){var ov=hero.querySelector('.cl-hero-overlay');hero.insertBefore(nc,ov||hero.firstChild);}
+      }
+    }
+
+    /* ── PREVIEW_LANG : changer la langue de l'aperçu en direct ── */
+    if(msg.type==='PREVIEW_LANG'){
+      var ltg=document.getElementById('el-lang-toggle');
+      if(msg.lang==='bilingual'){
+        if(ltg) ltg.style.display='flex';
+        setLang('fr', null);
+      } else {
+        if(ltg) ltg.style.display='none';
+        setLang(msg.lang==='en'?'en':'fr', null);
+      }
+    }
+
+    /* ── PREVIEW_OVERLAY_POS : déplacer un élément de la couverture ── */
+    if(msg.type==='PREVIEW_OVERLAY_POS'){
+      var item=document.querySelector('[data-overlay="'+msg.field+'"]');
+      var zCentre=document.getElementById('el-hero-zone-centre');
+      var zBas=document.getElementById('el-hero-zone-bas');
+      if(item){
+        if(msg.pos==='masqué'||msg.pos==='masque'){
+          item.style.display='none';
+        } else {
+          item.style.display='';
+          if(msg.pos==='bas' && zBas) zBas.appendChild(item);
+          else if(zCentre) zCentre.appendChild(item);
+        }
       }
     }
 
